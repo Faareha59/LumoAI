@@ -35,6 +35,35 @@ export default defineConfig(({ mode }) => {
               res.end(JSON.stringify({ error: 'Auth server unavailable' }));
             }
           });
+          // Proxy /api/admin to the same auth server
+          server.middlewares.use('/api/admin', async (req, res) => {
+            const path = (req as any).originalUrl || req.url;
+            const target = `http://localhost:8765${path}`;
+            try {
+              const body = await new Promise<string>((resolve) => {
+                let data = '';
+                req.on('data', (c) => (data += c));
+                req.on('end', () => resolve(data));
+              });
+              const proxyRes = await fetch(target, {
+                method: req.method,
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
+                  ...(req.headers['x-admin-secret'] ? { 'x-admin-secret': req.headers['x-admin-secret'] as string } : {}),
+                },
+                body: body || undefined,
+              });
+              const json = await proxyRes.text();
+              res.statusCode = proxyRes.status;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(json);
+            } catch (e: any) {
+              res.statusCode = 502;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Admin API unavailable' }));
+            }
+          });
           server.middlewares.use('/api/generate-image', async (req, res) => {
             if (req.method !== 'POST') {
               res.statusCode = 405;

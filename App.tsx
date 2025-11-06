@@ -8,6 +8,7 @@ import Chatbot from './components/student/Chatbot';
 import StudyTools from './components/student/StudyTools';
 import CodingGame from './components/student/CodingGame';
 import VideoGenerator from './components/teacher/VideoGenerator';
+import AdminConsole from './components/admin/AdminConsole';
 import type { User, AppView, VideoDraft, Course, CourseModule } from './types';
 import { LumoLogo } from './components/Icons';
 
@@ -18,6 +19,7 @@ const App: React.FC = () => {
     const [selectedLecture, setSelectedLecture] = useState<VideoDraft | null>(null);
     const [generationContext, setGenerationContext] = useState<{course: Course, module: CourseModule} | null>(null);
     const [showSplash, setShowSplash] = useState(true);
+    const [showAdminConsole, setShowAdminConsole] = useState(false);
 
     useEffect(() => {
         const t = setTimeout(() => setShowSplash(false), 2000);
@@ -163,7 +165,10 @@ const App: React.FC = () => {
     }
 
     if (!user) {
-        return <Auth onLogin={handleLogin} />;
+        if (showAdminConsole) {
+            return <AdminConsole onClose={() => setShowAdminConsole(false)} />;
+        }
+        return <Auth onLogin={handleLogin} onShowAdminConsole={() => setShowAdminConsole(true)} />;
     }
 
     return (

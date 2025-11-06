@@ -6,11 +6,11 @@ import { LumoLogo } from './Icons';
 
 interface AuthProps {
     onLogin: (user: User) => void;
+    onShowAdminConsole: () => void;
 }
 
-const Auth: React.FC<AuthProps> = ({ onLogin }) => {
+const Auth: React.FC<AuthProps> = ({ onLogin, onShowAdminConsole }) => {
     const [mode, setMode] = useState<'login' | 'register'>('login');
-    const [role, setRole] = useState<Role>(Role.Student);
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -24,7 +24,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setLoading(true);
         try {
             if (mode === 'register') {
-                const { user } = await apiRegister({ name, email, password, role });
+                const { user } = await apiRegister({ name, email, password, role: Role.Student });
                 onLogin(user);
             } else {
                 const { user } = await apiLogin({ email, password });
@@ -129,20 +129,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </div>
 
                         {mode === 'register' && (
-                            <div className="grid grid-cols-2 gap-2">
-                                <button onClick={()=>setRole(Role.Student)} className={`p-3 border rounded flex flex-col items-center ${role===Role.Student?'bg-foreground text-background':'bg-background border-border'}`}>
-                                    <span className="text-2xl">🎓</span><span className="text-sm font-semibold">Student</span>
-                                </button>
-                                <button onClick={()=>setRole(Role.Teacher)} className={`p-3 border rounded flex flex-col items-center ${role===Role.Teacher?'bg-foreground text-background':'bg-background border-border'}`}>
-                                    <span className="text-2xl">👩‍🏫</span><span className="text-sm font-semibold">Teacher</span>
-                                </button>
+                            <div className="text-xs text-muted-foreground">
+                                New accounts are student-only. Teacher accounts are created by the admin.
                             </div>
                         )}
 
                         {mode === 'login' && (
                             <div className="flex items-center justify-between text-sm">
                                 <label className="flex items-center gap-2"><input type="checkbox" checked={remember} onChange={(e)=>setRemember(e.target.checked)} /> Remember me</label>
-                                <button type="button" className="text-foreground/80 hover:underline">Forgot password?</button>
                             </div>
                         )}
 
@@ -153,6 +147,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </Button>
 
                         <p className="text-xs text-muted-foreground text-center">By continuing, you agree to the Terms and Privacy Policy.</p>
+                        <button
+                            type="button"
+                            onClick={onShowAdminConsole}
+                            className="w-full text-xs text-center text-foreground/80 hover:underline"
+                        >
+                            Admin? Open the provisioning console
+                        </button>
                     </div>
                 </div>
             </div>
