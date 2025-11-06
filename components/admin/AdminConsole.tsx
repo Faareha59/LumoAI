@@ -60,7 +60,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                     <Button variant="secondary" onClick={onClose}>Back to Login</Button>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    Use this console before the panel demo: set the admin secret once, create temporary teacher accounts, and reset passwords instantly—no command line required.
+                    Enter the admin secret to create teacher logins or issue a new temporary password in seconds.
                 </p>
 
                 <div className="space-y-2">
@@ -78,7 +78,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                     <section className="space-y-4">
                         <div>
                             <h2 className="text-lg font-semibold">Create Teacher</h2>
-                            <p className="text-xs text-muted-foreground">Generates a teacher account with a temporary password you can share.</p>
+                            <p className="text-xs text-muted-foreground">Add a teacher account with a temp password to share.</p>
                         </div>
                         <input
                             type="text"
@@ -105,14 +105,14 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             {loading === 'create' ? 'Creating…' : 'Create teacher'}
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                            Tip: Use a strong temporary password (at least 8 characters). Teachers must change it after first login.
+                            Tip: Temporary passwords must be at least 8 characters.
                         </p>
                     </section>
 
                     <section className="space-y-4">
                         <div>
                             <h2 className="text-lg font-semibold">Reset Password</h2>
-                            <p className="text-xs text-muted-foreground">Issue a new temporary password if a teacher forgets theirs.</p>
+                            <p className="text-xs text-muted-foreground">Replace an existing teacher password with a new temp code.</p>
                         </div>
                         <input
                             type="email"
@@ -132,7 +132,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             {loading === 'reset' ? 'Resetting…' : 'Reset password'}
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                            Share the new temporary password securely with the teacher.
+                            Share the new temp password securely with the teacher.
                         </p>
                     </section>
                 </div>
@@ -143,14 +143,8 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                <div className="text-xs text-muted-foreground space-y-2">
-                    <p><strong>Demo script for the panel:</strong></p>
-                    <ol className="list-decimal list-inside space-y-1">
-                        <li>Open Admin Console, enter the secret (same as <code>ADMIN_SECRET</code>).</li>
-                        <li>Create a teacher with a temporary password.</li>
-                        <li>Login as the teacher on the main screen and show the teacher dashboard.</li>
-                        <li>After the demo, reset the password if needed.</li>
-                    </ol>
+                <div className="text-xs text-muted-foreground">
+                    Need a refresher? Create or reset, then log in as that teacher to demo their dashboard.
                 </div>
             </div>
         </div>
