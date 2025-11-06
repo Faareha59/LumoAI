@@ -152,7 +152,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onShowAdminConsole }) => {
                             onClick={onShowAdminConsole}
                             className="w-full text-xs text-center text-foreground/80 hover:underline"
                         >
-                            Admin? Open the provisioning console
+                            Admin console
                         </button>
                     </div>
                 </div>
