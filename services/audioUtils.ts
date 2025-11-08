@@ -1,6 +1,4 @@
-// services/audioUtils.ts
 
-// Decodes a base64 string into a Uint8Array.
 function decode(base64: string): Uint8Array {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -21,8 +19,7 @@ export const createAudioUrlFromBase64 = (base64Audio: string): string => {
     try {
         const audioBytes = decode(base64Audio);
         
-        // Raw PCM data needs a WAV header to be playable in the browser.
-        // Gemini TTS uses 24000Hz sample rate, 16-bit, mono.
+       
         const wavHeader = createWavHeader({
             dataLength: audioBytes.length,
             sampleRate: 24000,
@@ -65,7 +62,7 @@ function createWavHeader({ dataLength, numChannels, sampleRate, bitsPerSample }:
     view.setUint32(4, 36 + dataLength, true);
     writeString(view, 8, 'WAVE');
     
-    // "fmt " sub-chunk
+   
     writeString(view, 12, 'fmt ');
     view.setUint32(16, 16, true); // Subchunk1Size for PCM
     view.setUint16(20, 1, true); // AudioFormat, 1 for PCM
@@ -75,7 +72,7 @@ function createWavHeader({ dataLength, numChannels, sampleRate, bitsPerSample }:
     view.setUint16(32, blockAlign, true);
     view.setUint16(34, bitsPerSample, true);
     
-    // "data" sub-chunk
+    
     writeString(view, 36, 'data');
     view.setUint32(40, dataLength, true);
 
