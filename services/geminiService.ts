@@ -5,7 +5,7 @@ import { createAudioUrlFromBase64 } from './audioUtils';
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 let chat: Chat;
 
-// Type for the draft generation response from the model
+
 interface DraftContentsResponse {
     title: string;
     summary: string;
@@ -13,7 +13,7 @@ interface DraftContentsResponse {
     quiz: QuizQuestion[];
 }
 
-// Utility to add a delay between API calls to prevent rate limiting.
+
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 
@@ -32,7 +32,7 @@ export const generateImagesForSlidesViaPexels = async (
     const results: string[] = [];
     for (const slide of slides) {
         const queryBase = slide.imagePrompt?.trim() || '';
-        // Pexels works best with natural phrases; also try to bias to CS visuals
+        
         const query = queryBase || 'computer science diagram';
         try {
             const resp = await fetch('/api/pexels-search', {
@@ -46,7 +46,7 @@ export const generateImagesForSlidesViaPexels = async (
         } catch (e) {
             results.push('');
         }
-        // small delay to be polite
+        
         await delay(200);
     }
     return results;
@@ -111,7 +111,7 @@ export const generateCourseModules = async (subject: string): Promise<ModuleOutl
 };
 
 
-// Updated to generate 20 slides for a specific module within a course.
+
 export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline): Promise<DraftContentsResponse> => {
     const model = 'gemini-2.5-flash'; 
 
@@ -297,7 +297,7 @@ export const generateAudioForSlides = async (
                 console.error(`Error generating audio for slide ${slideIndex}:`, error);
                 audioUrls.push("");
                 if (isRateLimited) {
-                    // Avoid blocking the whole flow—skip remaining slides' audio
+                    
                     hitGlobalRateLimit = true;
                 }
                 break;
