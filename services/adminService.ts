@@ -1,7 +1,6 @@
-const { VITE_AUTH_BASE_URL, VITE_ADMIN_BASE_URL } = import.meta.env as Record<string, string | undefined>;
-
-const AUTH_BASE = VITE_AUTH_BASE_URL?.trim() || 'http://localhost:8877/api/auth';
-const ADMIN_BASE = VITE_ADMIN_BASE_URL?.trim() || AUTH_BASE.replace(/\/auth$/, '/admin');
+const envVars = (import.meta as any)?.env as Record<string, string | undefined>;
+const AUTH_BASE = envVars?.VITE_AUTH_BASE_URL?.trim() || 'http://localhost:8765/api/auth';
+const ADMIN_BASE = envVars?.VITE_ADMIN_BASE_URL?.trim() || AUTH_BASE.replace(/\/auth$/, '/admin');
 
 interface CreateTeacherResponse {
   user: {
