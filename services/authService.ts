@@ -23,7 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${AUTH_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
   let res = await fetch(url, { ...init, headers });
   const data = await res.json().catch(() => ({}));
-  // Fallback: if proxy misroutes (404) and we're using default base, retry direct auth server
+  
   if (res.status === 404 && AUTH_BASE === '/api/auth') {
     try {
       const direct = `http://localhost:8765/api/auth${path.startsWith('/') ? '' : '/'}${path}`;
