@@ -37,7 +37,7 @@ const App: React.FC = () => {
 
     const handleLogout = () => {
         setUser(null);
-        setCourses([]); // Clear data on logout
+        setCourses([]); 
     };
 
     const handleSelectLecture = (lecture: VideoDraft) => {
@@ -65,7 +65,7 @@ const App: React.FC = () => {
                 if (course.id === courseId) {
                     const updatedModules = course.modules.map(module => {
                         if (module.id === moduleId) {
-                            // Prepend the new lecture to the module's lecture list
+                           
                             return { ...module, lectures: [video, ...module.lectures] };
                         }
                         return module;
@@ -144,10 +144,10 @@ const App: React.FC = () => {
                                 onCancel={handleBackToDashboard}
                            />;
                 }
-                 handleBackToDashboard(); // Fallback if context is lost
+                 handleBackToDashboard(); 
                  return null;
             default:
-                // Fallback to the user's default dashboard
+               
                 handleBackToDashboard();
                 return null;
         }
