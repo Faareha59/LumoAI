@@ -9,12 +9,101 @@ let chat: Chat;
 interface DraftContentsResponse {
     title: string;
     summary: string;
-    slides: { description: string; imagePrompt: string; }[];
+    slides: {
+        heading?: string;
+        description: string;
+        imagePrompt: string;
+        codeSnippet?: string;
+        snippetLanguage?: string;
+    }[];
     quiz: QuizQuestion[];
 }
 
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const BASE_CS_KEYWORDS = [
+    'computer science',
+    'programming',
+    'software engineering',
+    'algorithms',
+    'data structures',
+    'code editor'
+];
+
+const CS_KEYWORD_PATTERN = /(computer|program|code|algorithm|data|software|hardware|cyber|ai|machine|network|developer|compiler|database|cloud)/i;
+
+const sanitizeKeyword = (keyword: string) => keyword.replace(/\s+/g, ' ').trim();
+
+const splitKeywordString = (input?: string): string[] => {
+    if (!input) return [];
+    return input
+        .split(/[,;/\n]+/)
+        .map((kw) => sanitizeKeyword(kw))
+        .filter(Boolean);
+};
+
+const extractTopicKeywords = (topic?: string): string[] => {
+    if (!topic) return [];
+    return topic
+        .split(/[-–—,:;/\n]+/)
+        .map((segment) => sanitizeKeyword(segment))
+        .filter(Boolean)
+        .slice(0, 4);
+};
+
+const buildCSKeywordList = (prompt?: string, topic?: string, extra?: string | string[]): string[] => {
+    const keywords: string[] = [];
+    const seen = new Set<string>();
+
+    const addKeyword = (kw: string) => {
+        const cleaned = sanitizeKeyword(kw);
+        if (!cleaned) return;
+        const lower = cleaned.toLowerCase();
+        if (seen.has(lower)) return;
+        seen.add(lower);
+        keywords.push(cleaned);
+    };
+
+    splitKeywordString(prompt).forEach(addKeyword);
+    extractTopicKeywords(topic).forEach(addKeyword);
+
+    const extras = Array.isArray(extra) ? extra : extra ? [extra] : [];
+    extras.forEach(addKeyword);
+
+    const hasCSContext = keywords.some((kw) => CS_KEYWORD_PATTERN.test(kw));
+    if (!hasCSContext) {
+        BASE_CS_KEYWORDS.forEach(addKeyword);
+    } else {
+        addKeyword('computer science');
+    }
+
+    return keywords.slice(0, 6);
+};
+
+const THEME_RULES: { theme: string; pattern: RegExp }[] = [
+    { theme: 'data-structures', pattern: /(array|linked list|stack|queue|tree|graph|hash)/i },
+    { theme: 'algorithms', pattern: /(algorithm|sorting|search|complexity|dynamic programming|greedy)/i },
+    { theme: 'programming', pattern: /(code|syntax|function|method|class|loop|python|java|c\+\+|javascript)/i },
+    { theme: 'parallelism', pattern: /(parallel|concurrency|multithread|thread|synchronization|distributed)/i },
+    { theme: 'security', pattern: /(security|encryption|cipher|authentication|threat|malware|forensics|penetration)/i },
+    { theme: 'networks', pattern: /(network|protocol|tcp|ip|routing|packet|latency)/i },
+    { theme: 'databases', pattern: /(database|sql|query|table|schema|transaction|relational|nosql)/i },
+    { theme: 'ai-ml', pattern: /(machine learning|deep learning|neural|ai|model|training|dataset)/i },
+    { theme: 'software-engineering', pattern: /(design pattern|testing|refactor|architecture|agile|scrum|devops)/i },
+    { theme: 'computer-architecture', pattern: /(cpu|memory hierarchy|instruction|pipeline|cache|hardware)/i },
+    { theme: 'operating-systems', pattern: /(operating system|process|thread|deadlock|scheduling|virtual memory)/i }
+];
+
+const inferVisualTheme = (keywords: string[], description?: string): string => {
+    const haystack = `${keywords.join(' ')} ${description ?? ''}`.toLowerCase();
+    for (const rule of THEME_RULES) {
+        if (rule.pattern.test(haystack)) {
+            return rule.theme;
+        }
+    }
+    return 'computer-science';
+};
 
 
 export const startChat = () => {
@@ -31,9 +120,11 @@ export const generateImagesForSlidesViaPexels = async (
 ): Promise<string[]> => {
     const results: string[] = [];
     for (const slide of slides) {
-        const queryBase = slide.imagePrompt?.trim() || '';
-        
-        const query = queryBase || 'computer science diagram';
+        const keywords = (slide.keywords && slide.keywords.length)
+            ? slide.keywords
+            : buildCSKeywordList(slide.imagePrompt, undefined, slide.snippetLanguage ? `${slide.snippetLanguage} code` : undefined);
+        const query = keywords.join(' ') || 'computer science diagram';
+
         try {
             const resp = await fetch('/api/pexels-search', {
                 method: 'POST',
@@ -110,14 +201,8 @@ export const generateCourseModules = async (subject: string): Promise<ModuleOutl
     }
 };
 
-
-<<<<<<< Updated upstream
-
-export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline): Promise<DraftContentsResponse> => {
-=======
 // Updated to generate 20 slides for a specific module within a course.
 export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline, topic?: string, context?: string): Promise<DraftContentsResponse> => {
->>>>>>> Stashed changes
     const model = 'gemini-2.5-flash'; 
 
     const prompt = `You are an expert in Computer Science education. Create the content for a single, focused video lecture.
@@ -125,10 +210,18 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
     The specific module for this lecture is: "${module.title} - ${module.description}".
     ${topic ? `Focus the lecture narrowly on the topic: "${topic}". Ensure all slides and the quiz reflect this topic.` : ''}
     ${context ? `Use the following course materials as your primary source. Do not invent facts. If the answer is not in the materials, state assumptions clearly and keep content consistent with the materials.\n\nCOURSE MATERIALS CONTEXT (truncated):\n${context.slice(0, 4000)}` : ''}
-    The lecture should be concise, engaging, and suitable for undergraduate students.
-    Return a JSON object with keys: "title", "summary", "slides", and "quiz".
-    - "slides" must be an array of exactly 20 items, each with "description" (1-2 sentences) and an "imagePrompt" (a descriptive prompt for a relevant image).
-    - "quiz" must be an array of 5 objects with keys: "question", "options" (4 multiple-choice answers), and "correctAnswer".`;
+    The final output should be a slideshow with audio. Create exactly 20 slides that cover the key concepts of this module. Each slide's description should flow smoothly into the next and stay strictly within Computer Science, using terminology aligned with the module topic.
+    
+    Provide the following in a single JSON object:
+    1.  "title": A concise and academic title for this specific lecture (e.g., "Introduction to ${module.title}").
+    2.  "summary": A brief one or two-sentence summary of this lecture's content.
+    3.  "slides": An array of exactly 20 slide objects. Each slide object must have:
+        - "heading": A 3-6 word heading summarizing the slide.
+        - "description": A short, focused paragraph (2-4 sentences) of narration for the slide.
+        - "codeSnippet": Up to 10 lines of relevant code that illustrates the concept. Use an empty string if code is not helpful for this slide.
+        - "snippetLanguage": The programming language used in the snippet (e.g., "python", "c++"). Use an empty string if no code is provided.
+        - "imagePrompt": A comma-separated list of 2-3 simple, SFW keywords that depict a computer science visual for the exact concept on the slide (e.g., "c++ syntax, code editor", "python functions, developer workstation", "data structures, algorithm diagram"). Avoid generic nature or business imagery.
+    4.  "quiz": An array of exactly 10 multiple-choice quiz questions based on this lecture's slide content. Each question object must have "question", "options" (an array of 4), and "correctAnswer".`;
 
     try {
         const response = await ai.models.generateContent({
@@ -146,10 +239,13 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
                             items: {
                                 type: Type.OBJECT,
                                 properties: {
+                                    heading: { type: Type.STRING },
                                     description: { type: Type.STRING },
                                     imagePrompt: { type: Type.STRING },
+                                    codeSnippet: { type: Type.STRING },
+                                    snippetLanguage: { type: Type.STRING },
                                 },
-                                required: ["description", "imagePrompt"],
+                                required: ["heading", "description", "imagePrompt", "codeSnippet", "snippetLanguage"],
                             }
                         },
                         quiz: {
@@ -180,7 +276,23 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
             throw new Error("AI response is missing required fields.");
         }
         
-        return draftData;
+        const topicContext = `${module.title} ${module.description ?? ''}`.trim();
+        const slides = (draftData.slides ?? []).map((slide) => {
+            const snippetLanguageKeyword = slide.snippetLanguage ? `${slide.snippetLanguage} code` : undefined;
+            const keywords = buildCSKeywordList(slide.imagePrompt, topicContext, snippetLanguageKeyword);
+            const visualTheme = inferVisualTheme(keywords, slide.description);
+            return {
+                ...slide,
+                imagePrompt: keywords.join(', '),
+                keywords,
+                visualTheme,
+                heading: slide.heading?.trim() || undefined,
+                codeSnippet: slide.codeSnippet?.trim() || '',
+                snippetLanguage: slide.snippetLanguage?.trim().toLowerCase() || '',
+            };
+        });
+
+        return { ...draftData, slides };
     } catch (error) {
         console.error("Error generating video draft contents:", error);
         throw new Error("Failed to generate the video contents.");
@@ -195,20 +307,14 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
  */
 export const generateImagesForSlides = (slides: Slide[]): string[] => {
     return slides.map(slide => {
-        // Clean up the prompt to be URL-safe keywords
-        const keywords = slide.imagePrompt
-            .split(',')
-            .map(kw => kw.trim().replace(/\s+/g, '-')) // Replace spaces with dashes
-            .filter(Boolean) // Remove any empty keywords
-            .join(',');
+        const keywords = (slide.keywords && slide.keywords.length)
+            ? slide.keywords
+            : buildCSKeywordList(slide.imagePrompt, undefined, slide.snippetLanguage ? `${slide.snippetLanguage} code` : undefined);
+        const urlKeywords = keywords.length
+            ? keywords.map(kw => kw.replace(/\s+/g, '-')).join(',')
+            : 'computer-science,programming';
 
-        if (!keywords) {
-            // Provide a default if keywords are empty
-            return `https://source.unsplash.com/1600x900/?technology`;
-        }
-        
-        // Use Unsplash Source to get a random image based on keywords
-        return `https://source.unsplash.com/1600x900/?${keywords}`;
+        return `https://source.unsplash.com/1600x900/?${urlKeywords}`;
     });
 };
 
@@ -221,8 +327,13 @@ export const generateImagesForSlidesViaOpenRouter = async (
     const size = options?.size || '1280x720';
     const results: string[] = [];
     for (const slide of slides) {
-        const promptBase = slide.imagePrompt?.trim() || '';
-        const prompt = promptBase || 'technology diagram, computer science';
+        const keywords = (slide.keywords && slide.keywords.length)
+            ? slide.keywords
+            : buildCSKeywordList(slide.imagePrompt, undefined, slide.snippetLanguage ? `${slide.snippetLanguage} code` : undefined);
+        const promptBase = keywords.join(', ');
+        const prompt = promptBase
+            ? `${promptBase}, professional computer science visualization`
+            : 'technology diagram, computer science education';
         try {
             const resp = await fetch('/api/generate-image', {
                 method: 'POST',

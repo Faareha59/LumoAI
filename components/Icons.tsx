@@ -49,6 +49,26 @@ export const SparklesIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => 
     </svg>
 );
 
+export const PdfExplainerIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+        <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M7 3h7l4 4v11.5A2.5 2.5 0 0115.5 21h-7A2.5 2.5 0 016 18.5V5.5A2.5 2.5 0 018.5 3H7z"
+        />
+        <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M14 3v4.5h4.5"
+        />
+        <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M10.25 11.75l3.75 2.25-3.75 2.25v-4.5z"
+        />
+    </svg>
+);
+
 export const DeleteIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

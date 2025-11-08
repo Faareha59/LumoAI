@@ -8,12 +8,23 @@
     "dev": "node index.js"
   },
   "dependencies": {
+<<<<<<< HEAD
     "@google/generative-ai": "^0.24.1",
+=======
+    "@google/genai": "^1.28.0",
+>>>>>>> 4354663 (Improve PDF explainer visuals and branding)
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "google-tts-api": "^2.0.2",
     "lumoai": "file:..",
     "mongodb": "^6.9.0",
+<<<<<<< HEAD
     "multer": "^2.0.2",
     "pdf-parse": "^2.4.5"
+=======
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.4.5",
+    "pdf-parse": "^1.1.1"
+>>>>>>> 4354663 (Improve PDF explainer visuals and branding)
   }
 }

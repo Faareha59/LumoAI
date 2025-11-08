@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { User, AppView } from '../types';
 import { Role } from '../types';
-import { DashboardIcon, VideoIcon, ChatIcon, GameIcon, TimerIcon, LogoutIcon, SparklesIcon, LumoLogo } from './Icons';
+import { DashboardIcon, VideoIcon, ChatIcon, GameIcon, TimerIcon, LogoutIcon, SparklesIcon, LumoLogo, PdfExplainerIcon } from './Icons';
 
 interface SidebarProps {
   user: User;
@@ -20,8 +20,8 @@ const NavItem: React.FC<{ icon: React.ReactNode; label: string; isActive: boolea
 const Sidebar: React.FC<SidebarProps> = ({ user, currentView, setView, onLogout }) => {
   const studentNav = [
     { view: 'student_dashboard' as AppView, label: 'Dashboard', icon: <DashboardIcon className="w-5 h-5" /> },
-    { view: 'student_courses' as AppView, label: 'Courses', icon: <VideoIcon className="w-5 h-5" /> },
-    { view: 'student_videos' as AppView, label: 'Videos', icon: <VideoIcon className="w-5 h-5" /> },
+    { view: 'lecture_viewer' as AppView, label: 'Lectures', icon: <VideoIcon className="w-5 h-5" /> },
+    { view: 'pdf_explainer' as AppView, label: 'PDF Explainer', icon: <PdfExplainerIcon className="w-5 h-5" /> },
     { view: 'chatbot' as AppView, label: 'Live Q&A Chatbot', icon: <ChatIcon className="w-5 h-5" /> },
     { view: 'study_tools' as AppView, label: 'Study Tools', icon: <TimerIcon className="w-5 h-5" /> },
     { view: 'coding_game' as AppView, label: 'Coding Game', icon: <GameIcon className="w-5 h-5" /> },

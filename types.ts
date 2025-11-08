@@ -19,7 +19,8 @@ export type AppView =
   | 'study_tools'
   | 'coding_game'
   | 'teacher_dashboard'
-  | 'video_generator';
+  | 'video_generator'
+  | 'pdf_explainer';
 
 export interface QuizQuestion {
     question: string;
@@ -39,6 +40,14 @@ export interface Slide {
     imagePrompt: string; 
     imageUrl?: string;
     audioUrl?: string;
+    heading?: string;
+    visualTheme?: string;
+    keywords?: string[];
+    codeSnippet?: string;
+    snippetLanguage?: string;
+    pdfExcerpt?: string;
+    pdfPage?: number;
+    voiceover?: string;
 }
 
 // Represents a single video lecture.
@@ -48,6 +57,7 @@ export interface VideoDraft {
     summary: string;
     slides: Slide[];
     quiz: QuizQuestion[];
+    pdfDocumentBase64?: string;
 }
 
 // A module within a course, which contains lectures.

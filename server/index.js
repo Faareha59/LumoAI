@@ -1,13 +1,23 @@
+import dotenv from 'dotenv';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
 import { MongoClient, ObjectId, GridFSBucket } from 'mongodb';
 import crypto from 'crypto';
 import multer from 'multer';
+<<<<<<< HEAD
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 import { GoogleGenerativeAI } from '@google/generative-ai';
+=======
+import pdfParse from 'pdf-parse';
+import googleTTS from 'google-tts-api';
+import { GoogleGenAI, Type } from '@google/genai';
+import { Readable } from 'node:stream';
+
+dotenv.config();
+>>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -16,10 +26,264 @@ app.use(express.json());
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/Lumo_AI';
 const PORT = Number(process.env.PORT) || 8765;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
+<<<<<<< HEAD
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
 
 let db;
 let materialsBucket;
+=======
+const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+
+let db;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const pdfJobs = new Map();
+
+const updateJob = (jobId, updates) => {
+  const current = pdfJobs.get(jobId);
+  if (!current) return;
+  const next = { ...current, ...updates };
+  pdfJobs.set(jobId, next);
+};
+
+const buildImageUrl = (prompt, idx = 0) => {
+  const keywords = (prompt || 'education,learning')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(',');
+  const params = new URLSearchParams({
+    prompt: keywords || 'education,learning',
+    sig: String(idx)
+  });
+  return `/api/images/random?${params.toString()}`;
+};
+
+const generateSlidesFromGemini = async (jobId, text, originalName) => {
+  if (!ai) {
+    throw new Error('Gemini API key missing. Set API_KEY or GEMINI_API_KEY.');
+  }
+
+  const pages = text
+    .split(/\f+/)
+    .map((page) => page.trim())
+    .filter(Boolean);
+
+  const pageSnippets = [];
+  let usedChars = 0;
+  const BUDGET = 8000;
+  for (let i = 0; i < pages.length; i += 1) {
+    const snippet = pages[i].slice(0, 1200);
+    const chunk = `Page ${i + 1}:\n${snippet}`;
+    if (usedChars + chunk.length > BUDGET) break;
+    pageSnippets.push(chunk);
+    usedChars += chunk.length + 2;
+  }
+
+  const truncated = pageSnippets.length ? pageSnippets.join('\n\n') : text.slice(0, 8000);
+
+  const prompt = `You are helping university students understand a PDF titled "${originalName}".
+Extract the core ideas and produce a concise explainer slideshow.
+
+Return JSON with this structure:
+{
+  "title": string,
+  "summary": string,
+  "slides": [
+    {
+      "heading": string,
+      "description": string,
+      "imagePrompt": string,
+      "voiceover": string,
+      "pdfExcerpt": string,
+      "pdfPage": integer
+    }
+  ]
+}
+
+Rules:
+- Create between 8 and 12 slides so each idea can stay focused on a single PDF excerpt.
+- "description" must paraphrase the exact idea shown in "pdfExcerpt" and explicitly reference at least one technical term or proper noun from that excerpt. Keep it to 2 sentences max.
+- "voiceover" should restate the same idea in a warm, conversational tone ~40 words and stay faithful to the excerpt content—do not introduce unrelated concepts.
+- "imagePrompt" should be 2-3 comma-separated keywords for a background image that visually represents the same concept described in the excerpt.
+- "pdfExcerpt" must quote up to 60 words copied verbatim from the provided PDF excerpts. Preserve line breaks for code when helpful. Use an empty string only if no relevant quote exists.
+- "pdfPage" must be the 1-indexed page number that contains the excerpt. If unknown, best-guess based on the source excerpts.
+
+The PDF has ${pages.length || 1} pages. Here are excerpts to reference (do not invent content beyond these):
+"""
+${truncated}
+"""`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          summary: { type: Type.STRING },
+          slides: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                heading: { type: Type.STRING },
+                description: { type: Type.STRING },
+                imagePrompt: { type: Type.STRING },
+                voiceover: { type: Type.STRING },
+                pdfExcerpt: { type: Type.STRING },
+                pdfPage: { type: Type.INTEGER }
+              },
+              required: ['heading', 'description', 'imagePrompt', 'voiceover', 'pdfExcerpt', 'pdfPage']
+            }
+          }
+        },
+        required: ['title', 'summary', 'slides']
+      }
+    }
+  });
+
+  const payload = response.text?.trim() || '';
+  if (!payload) {
+    throw new Error('Gemini returned an empty response.');
+  }
+
+  const parsed = JSON.parse(payload);
+  if (!Array.isArray(parsed.slides) || !parsed.slides.length) {
+    throw new Error('Gemini response missing slides.');
+  }
+
+  return parsed;
+};
+
+const generateAudioDataUrl = async (text) => {
+  const input = (text || '').trim();
+  const speech = input || 'This slide is being prepared.';
+
+  try {
+    const segments = await googleTTS.getAllAudioBase64(speech.slice(0, 1000), {
+      lang: 'en',
+      slow: false,
+      splitPunct: ',.?!;:'
+    });
+
+    if (Array.isArray(segments) && segments.length > 0) {
+      const buffers = segments.map((segment) => {
+        const base64 = segment?.base64 || segment;
+        return Buffer.from(base64, 'base64');
+      });
+      const combined = Buffer.concat(buffers);
+      return `data:audio/mp3;base64,${combined.toString('base64')}`;
+    }
+  } catch (err) {
+    console.warn('Falling back to single TTS chunk:', err?.message || err);
+  }
+
+  const fallback = await googleTTS.getAudioBase64(speech.slice(0, 180), {
+    lang: 'en',
+    slow: false
+  });
+  return `data:audio/mp3;base64,${fallback}`;
+};
+
+const processPdfExplainerJob = async (jobId, buffer, originalName) => {
+  try {
+    updateJob(jobId, { status: 'analyzing', message: 'Analyzing PDF content…', progress: null });
+
+    const parsed = await pdfParse(buffer).catch((err) => {
+      throw new Error(`Failed to read PDF: ${err?.message || err}`);
+    });
+    const text = String(parsed.text || '').trim();
+    if (!text) {
+      throw new Error('No readable text found in PDF. Please upload a text-based PDF.');
+    }
+
+    const pdfDocumentBase64 = buffer.toString('base64');
+    const totalPdfPages = Number.isFinite(parsed.numpages) ? Number(parsed.numpages) : 0;
+
+    updateJob(jobId, { status: 'drafting', message: 'Generating slide summaries…' });
+
+    const outline = await generateSlidesFromGemini(jobId, text, originalName);
+
+    updateJob(jobId, { status: 'narrating', message: 'Creating narration audio…', progress: { current: 0, total: outline.slides.length } });
+
+    const slidesWithMedia = [];
+    const totalPagesForAssignment = totalPdfPages > 0 ? totalPdfPages : outline.slides.length;
+    const usedPages = new Set();
+    let fallbackCursor = 1;
+
+    const getNextFallbackPage = () => {
+      if (totalPagesForAssignment <= 0) return null;
+      // If we haven't used every page yet, find the next unused one.
+      for (let attempt = 0; attempt < totalPagesForAssignment; attempt += 1) {
+        const candidate = ((fallbackCursor + attempt - 1) % totalPagesForAssignment) + 1;
+        if (!usedPages.has(candidate)) {
+          fallbackCursor = (candidate % totalPagesForAssignment) + 1;
+          return candidate;
+        }
+      }
+      // All pages already used; fall back to cycling by index.
+      const candidate = fallbackCursor;
+      fallbackCursor = (fallbackCursor % totalPagesForAssignment) + 1;
+      return candidate;
+    };
+
+    for (let i = 0; i < outline.slides.length; i += 1) {
+      const slide = outline.slides[i];
+      const narration = (slide.voiceover && slide.voiceover.trim()) || (slide.description && slide.description.trim()) || '';
+      const audioUrl = await generateAudioDataUrl(narration);
+      const displayDescription = narration || slide.description;
+      const fallbackImageUrl = buildImageUrl(slide.imagePrompt, i);
+      let inferredPage = null;
+      if (typeof slide.pdfPage === 'number' && slide.pdfPage >= 1 && totalPagesForAssignment > 0) {
+        const candidate = Math.min(slide.pdfPage, totalPagesForAssignment);
+        if (!usedPages.has(candidate)) {
+          inferredPage = candidate;
+          usedPages.add(candidate);
+        }
+      }
+      if (!inferredPage) {
+        const candidate = getNextFallbackPage();
+        if (candidate) {
+          inferredPage = candidate;
+          usedPages.add(candidate);
+        }
+      }
+
+      slidesWithMedia.push({
+        description: displayDescription,
+        imagePrompt: slide.imagePrompt,
+        imageUrl: fallbackImageUrl,
+        audioUrl,
+        heading: slide.heading,
+        pdfExcerpt: slide.pdfExcerpt,
+        pdfPage: inferredPage,
+        voiceover: narration || undefined
+      });
+      updateJob(jobId, { progress: { current: i + 1, total: outline.slides.length } });
+    }
+
+    updateJob(jobId, { status: 'rendering', message: 'Preparing preview…', progress: null });
+
+    const draft = {
+      id: `draft-${jobId}`,
+      title: outline.title || `${originalName} · Explainer`,
+      summary: outline.summary || 'AI-generated explainer summary.',
+      slides: slidesWithMedia,
+      quiz: [],
+      pdfDocumentBase64
+    };
+
+    updateJob(jobId, { status: 'done', message: 'Explainer ready!', draft });
+  } catch (error) {
+    console.error('PDF explainer job failed:', error);
+    updateJob(jobId, { status: 'error', message: 'Failed to generate explainer.', error: error?.message || 'Unknown error.' });
+  }
+};
+
+>>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 async function initDb() {
   const client = new MongoClient(MONGODB_URI);
   await client.connect();
@@ -106,6 +370,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // ---------- Courses persistence ----------
 
 // List all courses with modules and lectures
@@ -202,6 +467,20 @@ app.delete('/api/courses/:courseId/modules/:moduleId/lectures/:lectureId', async
     return res.status(500).json({ error: 'Failed to delete lecture' });
   }
 });
+=======
+app.get('/api/pdf-explainer/status', (req, res) => {
+  const jobId = String(req.query.jobId || '').trim();
+  if (!jobId) {
+    return res.status(400).json({ error: 'jobId is required.' });
+  }
+  const job = pdfJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  return res.json(job);
+});
+
+>>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 // Admin-only endpoint to create teacher accounts
 app.post('/api/admin/create-teacher', async (req, res) => {
   try {
@@ -276,6 +555,88 @@ app.post('/api/admin/reset-password', async (req, res) => {
   } catch {
     return res.status(500).json({ error: 'Reset password failed' });
   }
+});
+
+app.post('/api/pdf-explainer/start', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'PDF file is required.' });
+    }
+    if (!ai) {
+      return res.status(500).json({ error: 'Gemini API key is not configured.' });
+    }
+    const jobId = crypto.randomBytes(12).toString('hex');
+    const originalName = req.file.originalname || 'Uploaded PDF';
+    const job = {
+      id: jobId,
+      status: 'analyzing',
+      message: 'Analyzing PDF content…',
+      draft: null,
+      progress: null,
+      error: null
+    };
+    pdfJobs.set(jobId, job);
+
+    // Fire and forget processing
+    setImmediate(() => {
+      processPdfExplainerJob(jobId, req.file.buffer, originalName).catch((err) => {
+        console.error('Job processing threw:', err);
+      });
+    });
+
+    return res.json({ jobId, status: job.status, message: job.message });
+  } catch (e) {
+    console.error('Failed to start PDF explainer job:', e);
+    const message = (e && e.message) ? e.message : 'Unable to start explainer job.';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get('/api/images/random', async (req, res) => {
+  try {
+    const prompt = String(req.query.prompt || 'education,learning');
+    const size = String(req.query.size || '1600x900');
+    const sig = String(req.query.sig || '0');
+    const keywords = prompt
+      .split(',')
+      .map((part) => part.trim().replace(/\s+/g, '+'))
+      .filter(Boolean)
+      .join(',');
+    const remoteUrl = `https://source.unsplash.com/${size}/?${keywords || 'education,learning'}&sig=${encodeURIComponent(sig)}`;
+
+    const response = await fetch(remoteUrl, { redirect: 'follow' });
+    if (!response.ok || !response.body) {
+      throw new Error(`Upstream request failed with status ${response.status}`);
+    }
+
+    res.set('Content-Type', response.headers.get('content-type') || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=3600');
+    const stream = Readable.fromWeb(response.body);
+    stream.on('error', (err) => {
+      console.error('Image proxy stream error:', err);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Image proxy stream failed.' });
+      } else {
+        res.destroy(err);
+      }
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('Image proxy failed:', err);
+    res.status(502).json({ error: 'Unable to fetch image.' });
+  }
+});
+
+app.get('/api/pdf-explainer/status', (req, res) => {
+  const jobId = String(req.query.jobId || '').trim();
+  if (!jobId) {
+    return res.status(400).json({ error: 'jobId is required.' });
+  }
+  const job = pdfJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found.' });
+  }
+  return res.json({ status: job.status, message: job.message, draft: job.draft || undefined, error: job.error, progress: job.progress || undefined });
 });
 
 app.get('/api/auth/me', async (req, res) => {

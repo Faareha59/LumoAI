@@ -8,6 +8,7 @@ import Chatbot from './components/student/Chatbot';
 import StudyTools from './components/student/StudyTools';
 import CodingGame from './components/student/CodingGame';
 import VideoGenerator from './components/teacher/VideoGenerator';
+import PdfExplainer from './components/student/PdfExplainer';
 import AdminConsole from './components/admin/AdminConsole';
 import type { User, AppView, VideoDraft, Course, CourseModule } from './types';
 import { LumoLogo } from './components/Icons';
@@ -124,45 +125,28 @@ const App: React.FC = () => {
         setCurrentView('video_generator');
     };
 
-<<<<<<< Updated upstream
-    const handlePublishVideo = (video: VideoDraft, courseId: string, moduleId: string) => {
-        setCourses(prevCourses => {
-            return prevCourses.map(course => {
-                if (course.id === courseId) {
-                    const updatedModules = course.modules.map(module => {
-                        if (module.id === moduleId) {
-                           
-                            return { ...module, lectures: [video, ...module.lectures] };
-                        }
-                        return module;
-                    });
-                    return { ...course, modules: updatedModules };
-                }
-                return course;
-            });
-        });
-        setCurrentView('teacher_dashboard');
-=======
     const handlePublishVideo = async (video: VideoDraft, courseId: string, moduleId: string) => {
         try {
             await apiAddLecture(courseId, moduleId, video);
             const data = await fetchCourses();
             setCourses(data.courses || []);
         } catch {
-            // Local fallback
             setCourses(prevCourses => prevCourses.map(course => (
                 course.id === courseId
-                ? { ...course, modules: course.modules.map(m => m.id === moduleId ? { ...m, lectures: [video, ...m.lectures] } : m) }
-                : course
+                    ? {
+                        ...course,
+                        modules: course.modules.map((m) =>
+                            m.id === moduleId ? { ...m, lectures: [video, ...m.lectures] } : m
+                        )
+                    }
+                    : course
             )));
         }
-        // After generation, send user back to their dashboard
         if (user?.role === 'teacher') {
             setCurrentView('teacher_dashboard');
         } else {
             setCurrentView('student_dashboard');
         }
->>>>>>> Stashed changes
         setGenerationContext(null);
     };
 
@@ -262,6 +246,8 @@ const App: React.FC = () => {
                 return <StudyTools />;
             case 'coding_game':
                 return <CodingGame />;
+            case 'pdf_explainer':
+                return <PdfExplainer />;
             case 'video_generator':
                 if (generationContext) {
                     return <VideoGenerator 
