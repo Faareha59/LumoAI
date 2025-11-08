@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { VideoDraft, Course, CourseModule } from '../../types';
 import { generateLectureForModule, generateImagesForSlides, generateImagesForSlidesViaOpenRouter, generateImagesForSlidesViaPexels, generateAudioForSlides } from '../../services/geminiService';
 import { exportLectureToWebM } from '../../services/videoExporter';
+import { retrieveContext } from '../../services/materialsService';
 import Button from '../common/Button';
 import Loader from '../common/Loader';
 import { SparklesIcon, VideoIcon, XCircleIcon, SpeakerIcon, PlayIcon, PauseIcon } from '../Icons';
@@ -9,13 +10,14 @@ import { SparklesIcon, VideoIcon, XCircleIcon, SpeakerIcon, PlayIcon, PauseIcon 
 interface VideoGeneratorProps {
     course: Course;
     module: CourseModule;
+    topic?: string;
     onPublish: (video: VideoDraft, courseId: string, moduleId: string) => void;
     onCancel: () => void;
 }
 
 type GenerationStep = 'idle' | 'drafting' | 'generating_audio' | 'done' | 'error';
 
-const VideoGenerator: React.FC<VideoGeneratorProps> = ({ course, module, onPublish, onCancel }) => {
+const VideoGenerator: React.FC<VideoGeneratorProps> = ({ course, module, topic, onPublish, onCancel }) => {
     const [draft, setDraft] = useState<VideoDraft | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [generationStep, setGenerationStep] = useState<GenerationStep>('idle');
@@ -52,7 +54,13 @@ const VideoGenerator: React.FC<VideoGeneratorProps> = ({ course, module, onPubli
         try {
             // Step 1: Generate script, quiz, and image prompts from the module context
             setGenerationStep('drafting');
-            const draftContents = await generateLectureForModule(course.title, module);
+            // Retrieve RAG context from materials (if any)
+            let contextText = '';
+            try {
+                const rag = await retrieveContext({ courseId: course.id, moduleId: module.id, topic: topic || module.title, limit: 12 });
+                contextText = rag.chunks.map(c => c.text).join('\n\n---\n\n');
+            } catch {}
+            const draftContents = await generateLectureForModule(course.title, module, topic, contextText);
             
             // Step 2: Generate Image URLs via Pexels -> OpenRouter -> stock photos
             let imageUrls: string[] = [];

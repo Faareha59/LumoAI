@@ -111,23 +111,24 @@ export const generateCourseModules = async (subject: string): Promise<ModuleOutl
 };
 
 
+<<<<<<< Updated upstream
 
 export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline): Promise<DraftContentsResponse> => {
+=======
+// Updated to generate 20 slides for a specific module within a course.
+export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline, topic?: string, context?: string): Promise<DraftContentsResponse> => {
+>>>>>>> Stashed changes
     const model = 'gemini-2.5-flash'; 
 
     const prompt = `You are an expert in Computer Science education. Create the content for a single, focused video lecture.
     This lecture is part of a larger university-level course titled "${courseTitle}".
     The specific module for this lecture is: "${module.title} - ${module.description}".
-
-    The final output should be a slideshow with audio. Create exactly 20 slides that cover the key concepts of this module. Each slide's description should flow smoothly into the next.
-    
-    Provide the following in a single JSON object:
-    1.  "title": A concise and academic title for this specific lecture (e.g., "Introduction to ${module.title}").
-    2.  "summary": A brief one or two-sentence summary of this lecture's content.
-    3.  "slides": An array of exactly 20 slide objects. Each slide object must have:
-        - "description": A short, focused paragraph (2-4 sentences) of narration for the slide.
-        - "imagePrompt": A comma-separated list of 2-3 simple, SFW keywords for finding a relevant stock photo (e.g., "binary code, computer screen", "networking, server room", "algorithm, flowchart").
-    4.  "quiz": An array of exactly 10 multiple-choice quiz questions based on this lecture's slide content. Each question object must have "question", "options" (an array of 4), and "correctAnswer".`;
+    ${topic ? `Focus the lecture narrowly on the topic: "${topic}". Ensure all slides and the quiz reflect this topic.` : ''}
+    ${context ? `Use the following course materials as your primary source. Do not invent facts. If the answer is not in the materials, state assumptions clearly and keep content consistent with the materials.\n\nCOURSE MATERIALS CONTEXT (truncated):\n${context.slice(0, 4000)}` : ''}
+    The lecture should be concise, engaging, and suitable for undergraduate students.
+    Return a JSON object with keys: "title", "summary", "slides", and "quiz".
+    - "slides" must be an array of exactly 20 items, each with "description" (1-2 sentences) and an "imagePrompt" (a descriptive prompt for a relevant image).
+    - "quiz" must be an array of 5 objects with keys: "question", "options" (4 multiple-choice answers), and "correctAnswer".`;
 
     try {
         const response = await ai.models.generateContent({

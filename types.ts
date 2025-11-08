@@ -12,6 +12,8 @@ export interface User {
 
 export type AppView =
   | 'student_dashboard'
+  | 'student_courses'
+  | 'student_videos'
   | 'lecture_viewer'
   | 'chatbot'
   | 'study_tools'
@@ -54,12 +56,15 @@ export interface CourseModule {
     title: string;
     description: string;
     lectures: VideoDraft[];
+    topics?: string[];
 }
 
 // The top-level structure for a subject.
 export interface Course {
     id: string;
     title: string; // The subject
+    description?: string;
+    creatorId?: string;
     modules: CourseModule[];
 }
 

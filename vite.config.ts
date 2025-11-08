@@ -3,67 +3,19 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
+  const env = loadEnv(mode, '.', '');
+  return {
       server: {
         port: 3000,
         host: '0.0.0.0',
-        // Dev-only middleware
+        proxy: {
+          '/api': {
+            target: 'http://localhost:8765',
+            changeOrigin: true,
+          },
+        },
+        // Dev-only middleware for external APIs only
         configureServer(server) {
-          // Proxy /api/auth to separate Express server on port 8765
-          server.middlewares.use('/api/auth', async (req, res, next) => {
-            const path = (req as any).originalUrl || req.url; // handle both stripped and full paths
-            const target = `http://localhost:8765${path}`;
-            try {
-              const body = await new Promise<string>((resolve) => {
-                let data = '';
-                req.on('data', (c) => (data += c));
-                req.on('end', () => resolve(data));
-              });
-              const proxyRes = await fetch(target, {
-                method: req.method,
-                headers: { 'Content-Type': 'application/json', ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}) },
-                body: body || undefined,
-              });
-              const json = await proxyRes.text();
-              res.statusCode = proxyRes.status;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(json);
-            } catch (e: any) {
-              res.statusCode = 502;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Auth server unavailable' }));
-            }
-          });
-          // Proxy /api/admin to the same auth server
-          server.middlewares.use('/api/admin', async (req, res) => {
-            const path = (req as any).originalUrl || req.url;
-            const target = `http://localhost:8765${path}`;
-            try {
-              const body = await new Promise<string>((resolve) => {
-                let data = '';
-                req.on('data', (c) => (data += c));
-                req.on('end', () => resolve(data));
-              });
-              const proxyRes = await fetch(target, {
-                method: req.method,
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
-                  ...(req.headers['x-admin-secret'] ? { 'x-admin-secret': req.headers['x-admin-secret'] as string } : {}),
-                },
-                body: body || undefined,
-              });
-              const json = await proxyRes.text();
-              res.statusCode = proxyRes.status;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(json);
-            } catch (e: any) {
-              res.statusCode = 502;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Admin API unavailable' }));
-            }
-          });
           server.middlewares.use('/api/generate-image', async (req, res) => {
             if (req.method !== 'POST') {
               res.statusCode = 405;
