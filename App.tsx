@@ -243,7 +243,7 @@ const App: React.FC = () => {
             case 'chatbot':
                 return <Chatbot userName={user.name} />;
             case 'study_tools':
-                return <StudyTools />;
+                return <StudyTools courses={courses} enrolledCourseIds={enrolledCourseIds} />;
             case 'coding_game':
                 return <CodingGame />;
             case 'pdf_explainer':

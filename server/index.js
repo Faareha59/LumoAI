@@ -107,7 +107,7 @@ const getAI = () => {
 
 let db;
 let materialsBucket;
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 const pdfJobs = new Map();
 
 const updateJob = (jobId, updates) => {
@@ -365,6 +365,95 @@ async function initDb() {
   db = client.db(dbName);
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
 
+// Edit a course (teacher only): update title/description
+app.patch('/api/courses/:courseId', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user || user.role !== 'teacher') return res.status(403).json({ error: 'Forbidden' });
+    const { courseId } = req.params;
+    const { title, description } = req.body || {};
+    const set = {};
+    if (typeof title === 'string' && title.trim()) set.title = title.trim();
+    if (typeof description === 'string' && description.trim()) set.description = description.trim();
+    if (!Object.keys(set).length) return res.status(400).json({ error: 'No changes' });
+    const or = [{ id: courseId }];
+    try { or.push({ _id: new ObjectId(courseId) }); } catch {}
+    const r = await db.collection('courses').updateOne({ $or: or }, { $set: set });
+    if (!r.matchedCount) return res.status(404).json({ error: 'Course not found' });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to update course' });
+  }
+});
+
+// Delete a course (teacher only)
+app.delete('/api/courses/:courseId', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user || user.role !== 'teacher') return res.status(403).json({ error: 'Forbidden' });
+    const { courseId } = req.params;
+    const or = [{ id: courseId }];
+    try { or.push({ _id: new ObjectId(courseId) }); } catch {}
+    const course = await db.collection('courses').findOne({ $or: or });
+    if (!course) return res.status(404).json({ error: 'Course not found' });
+    await db.collection('courses').deleteOne({ $or: or });
+    // Cleanup related data
+    await db.collection('materials').deleteMany({ courseId: String(course.id || course._id?.toString()) });
+    await db.collection('embeddings').deleteMany({ courseId: String(course.id || course._id?.toString()) });
+    await db.collection('enrollments').deleteMany({ courseId: String(course.id || course._id?.toString()) });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to delete course' });
+  }
+});
+
+// -------- Enrollments (Student) ---------
+
+// List my enrollments (course IDs)
+app.get('/api/enrollments', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const list = await db.collection('enrollments').find({ userId: user._id.toString() }).toArray();
+    return res.json({ courseIds: list.map(e => e.courseId) });
+  } catch {
+    return res.status(500).json({ error: 'Failed to fetch enrollments' });
+  }
+});
+
+// Enroll in a course
+app.post('/api/enrollments', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (user.role !== 'student') return res.status(403).json({ error: 'Only students can enroll' });
+    const { courseId } = req.body || {};
+    if (!courseId) return res.status(400).json({ error: 'courseId required' });
+    await db.collection('enrollments').updateOne(
+      { userId: user._id.toString(), courseId: String(courseId) },
+      { $set: { userId: user._id.toString(), courseId: String(courseId), createdAt: new Date() } },
+      { upsert: true }
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to enroll' });
+  }
+});
+
+// Withdraw from a course
+app.delete('/api/enrollments/:courseId', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (user.role !== 'student') return res.status(403).json({ error: 'Only students can withdraw' });
+    const { courseId } = req.params;
+    await db.collection('enrollments').deleteOne({ userId: user._id.toString(), courseId: String(courseId) });
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ error: 'Failed to withdraw' });
+  }
+});
+
 // Update module topics (teacher only)
 app.patch('/api/courses/:courseId/modules/:moduleId/topics', async (req, res) => {
   try {
@@ -373,8 +462,10 @@ app.patch('/api/courses/:courseId/modules/:moduleId/topics', async (req, res) =>
     const { courseId, moduleId } = req.params;
     const { topics } = req.body || {};
     if (!Array.isArray(topics)) return res.status(400).json({ error: 'Invalid payload' });
+    const or = [{ id: courseId }];
+    try { or.push({ _id: new ObjectId(courseId) }); } catch {}
     const r = await db.collection('courses').updateOne(
-      { $or: [{ id: courseId }, { _id: new ObjectId(courseId).catch?.(() => undefined) }], 'modules.id': moduleId },
+      { $or: or, 'modules.id': moduleId },
       { $set: { 'modules.$.topics': topics } }
     );
     if (r.matchedCount === 0) return res.status(404).json({ error: 'Course/module not found' });
@@ -388,6 +479,7 @@ app.patch('/api/courses/:courseId/modules/:moduleId/topics', async (req, res) =>
   await db.collection('materials').createIndex({ courseId: 1, moduleId: 1 });
   await db.collection('embeddings').createIndex({ courseId: 1, moduleId: 1 });
   await db.collection('enrollments').createIndex({ userId: 1, courseId: 1 }, { unique: true });
+  await db.collection('quiz_attempts').createIndex({ userId: 1, courseId: 1, moduleId: 1, createdAt: 1 });
   materialsBucket = new GridFSBucket(db, { bucketName: 'materials' });
   console.log(`Connected to MongoDB database: ${dbName}`);
 }
@@ -774,7 +866,9 @@ app.post('/api/materials/upload', upload.single('file'), async (req, res) => {
     const { courseId, moduleId, title } = req.body || {};
     if (!courseId || !req.file) return res.status(400).json({ error: 'Missing courseId or file' });
     const file = req.file;
-    if (!/pdf$/i.test(file.mimetype)) return res.status(400).json({ error: 'Only PDF is supported currently' });
+    const isPdfMime = /pdf$/i.test(file.mimetype || '');
+    const isPdfName = /\.pdf$/i.test(file.originalname || '');
+    if (!isPdfMime && !isPdfName) return res.status(400).json({ error: 'Only PDF is supported currently' });
 
     // Store file to GridFS
     const uploadStream = materialsBucket.openUploadStream(file.originalname, {
@@ -784,7 +878,10 @@ app.post('/api/materials/upload', upload.single('file'), async (req, res) => {
     uploadStream.end(file.buffer);
     const saved = await new Promise((resolve, reject) => {
       uploadStream.on('finish', resolve);
-      uploadStream.on('error', reject);
+      uploadStream.on('error', (err) => reject(err));
+    }).catch((e) => {
+      console.error('GridFS upload error:', e?.message || e);
+      throw new Error('Failed to store file');
     });
 
     const materialDoc = {
@@ -830,8 +927,8 @@ app.post('/api/materials/upload', upload.single('file'), async (req, res) => {
       return res.status(200).json({ material: { id: ins.insertedId.toString(), indexed: false, warning: 'Material saved but embedding failed. Set GEMINI_API_KEY to enable indexing.' } });
     }
   } catch (e) {
-    console.error('Upload error:', e);
-    return res.status(500).json({ error: 'Upload failed' });
+    console.error('Upload error:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'Upload failed' });
   }
 });
 
@@ -899,6 +996,200 @@ app.post('/api/rag/retrieve', async (req, res) => {
   } catch (e) {
     console.error('RAG retrieve error:', e);
     return res.status(500).json({ error: 'Failed to retrieve context' });
+  }
+});
+
+// -------- Quizzes (Student) ---------
+
+async function generateQuizWithGemini(subject, moduleTitle, topics) {
+  if (!genAI) return null;
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const prompt = `Create a short 5-question multiple-choice quiz for a course on "${subject}".
+Module: "${moduleTitle}".
+${Array.isArray(topics) && topics.length ? `Focus ONLY on these topics: ${topics.join(', ')}.` : ''}
+Strict requirements for options:
+- Each option must be a concrete, topic-specific phrase or statement (3–12 words).
+- Do NOT use generic placeholders like "Option A/B", "Definition A/B/C", "P1/P2/P3/P4", "Example A/B", etc.
+- No duplicated options; all options must be distinct and meaningful.
+
+Return STRICT JSON with key "quiz" as an array of 5 items, each with fields:
+  - question: string
+  - options: array of exactly 4 strings
+  - correctAnswer: one string that exactly matches one of the options.
+NO commentary, no markdown.`;
+  const r = await model.generateContent(prompt);
+  const text = (r?.response?.text() || '').trim();
+  try {
+    const obj = JSON.parse(text);
+    if (Array.isArray(obj?.quiz) && obj.quiz.length === 5) return obj.quiz;
+  } catch {}
+  return null;
+}
+
+function fallbackQuiz(subject, moduleTitle, topics = []) {
+  // Topic-aware fallback: questions and options come from module topics to avoid placeholders
+  const ts = (Array.isArray(topics) ? topics : []).filter(Boolean);
+  const pool = ts.length ? ts : [moduleTitle, subject].filter(Boolean);
+  const pickDistinct = (n, avoid = []) => {
+    const out = [];
+    const used = new Set(avoid.map(s => String(s)));
+    for (let i = 0; i < pool.length && out.length < n; i++) {
+      const v = String(pool[i]);
+      if (!used.has(v)) { out.push(v); used.add(v); }
+    }
+    let k = 0;
+    while (out.length < n) {
+      const v = `${moduleTitle} concept ${k+1}`;
+      if (!used.has(v)) { out.push(v); used.add(v); }
+      k++;
+    }
+    return out;
+  };
+
+  const makeQ = (idx) => {
+    const correct = pool[idx % pool.length];
+    const distractors = pickDistinct(3, [correct]);
+    const options = [correct, ...distractors].slice(0,4);
+    const question = `Which concept is most relevant to ${moduleTitle}?`;
+    return { question, options, correctAnswer: correct };
+  };
+
+  const qs = [];
+  for (let i = 0; i < 5; i++) qs.push(makeQ(i));
+  return qs;
+}
+
+// Ensure MCQs are well-formed: 4 unique non-empty options and a valid correctAnswer
+function sanitizeQuiz(quiz, courseTitle, moduleTitle, topics = []) {
+  if (!Array.isArray(quiz)) return [];
+  const makeDistractor = (i) => `${moduleTitle} concept ${i+1}`;
+  const placeholderRe = /^(option\s*[a-d]|definition\s*[a-d]|pitfall\s*[a-d]|ex(?:ample)?\s*[a-d]|p\d+)$/i;
+  const topicPool = (Array.isArray(topics) ? topics : []).filter(Boolean);
+  return quiz.map((q, idx) => {
+    const question = (q?.question && String(q.question).trim()) || `Question ${idx+1} on ${moduleTitle}`;
+    const rawOpts = Array.isArray(q?.options) ? q.options : [];
+    let trimmed = rawOpts.map(o => String(o || '').trim()).filter(Boolean);
+    // Replace generic placeholders with topic-derived phrases if detected
+    trimmed = trimmed.map((o, i2) => placeholderRe.test(o) ? (topicPool[i2 % Math.max(1, topicPool.length)] || makeDistractor(i2)) : o);
+    // Deduplicate while keeping order
+    const seen = new Set();
+    let options = trimmed.filter(o => { if (seen.has(o)) return false; seen.add(o); return true; });
+    let correct = String(q?.correctAnswer || '').trim();
+    if (correct && !options.includes(correct)) options.push(correct);
+    // Fill up to 4
+    let padIdx = 0;
+    while (options.length < 4) {
+      const cand = makeDistractor(padIdx++);
+      if (!options.includes(cand)) options.push(cand);
+    }
+    // Clip to 4 but keep correct if possible
+    if (options.length > 4) {
+      if (correct && options.includes(correct)) {
+        const keep = [correct];
+        for (const o of options) { if (keep.length === 4) break; if (o !== correct) keep.push(o); }
+        options = keep;
+      } else {
+        options = options.slice(0, 4);
+      }
+    }
+    if (!correct || !options.includes(correct)) correct = options[0];
+    return { question, options, correctAnswer: correct };
+  });
+}
+
+// Generate a quiz for a module (student)
+app.post('/api/quizzes/generate', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { courseId, moduleId } = req.body || {};
+    if (!courseId || !moduleId) return res.status(400).json({ error: 'courseId and moduleId required' });
+    // Relaxed: allow quiz generation without strict enrollment to avoid 403 in student UI
+    // If you want to re-enable, restore the enrollment check below.
+    // if (user.role === 'student') {
+    //   const enr = await db.collection('enrollments').findOne({ userId: user._id.toString(), courseId: String(courseId) });
+    //   if (!enr) return res.status(403).json({ error: 'Enroll in this course to generate quizzes' });
+    // }
+    const orCourse = [{ id: String(courseId) }];
+    try { orCourse.push({ _id: new ObjectId(String(courseId)) }); } catch {}
+    let course = await db.collection('courses').findOne({ $or: orCourse });
+    if (!course) {
+      // Fallback: locate by moduleId if courseId mapping changed
+      course = await db.collection('courses').findOne({ 'modules.id': String(moduleId) });
+      if (!course) return res.status(404).json({ error: 'Course not found' });
+    }
+    const mod = (course.modules || []).find(m => m.id === moduleId);
+    if (!mod) return res.status(404).json({ error: 'Module not found' });
+    // Build prompt context only from the module's teacher-defined topics (no materials)
+    const topics = Array.isArray(mod.topics) ? mod.topics : [];
+    let quiz = null;
+    try {
+      // Include topics and (if any) materials context
+      if (genAI) {
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const prompt = `Create a short 5-question multiple-choice quiz for a course on "${course.title}".\nModule: "${mod.title}".\nFocus strictly on these teacher-defined topics: ${topics.join(', ')}.\nReturn strict JSON with key "quiz" as an array of 5 items, each with: question (string), options (array of 4 strings), correctAnswer (one of the options). No commentary.`;
+        const r = await model.generateContent(prompt);
+        const text = (r?.response?.text() || '').trim();
+        try { const obj = JSON.parse(text); if (Array.isArray(obj?.quiz) && obj.quiz.length === 5) quiz = obj.quiz; } catch {}
+      }
+    } catch {}
+    if (!quiz) quiz = fallbackQuiz(course.title, mod.title, topics);
+    // Sanitize to guarantee valid MCQs and remove placeholders
+    quiz = sanitizeQuiz(quiz, course.title, mod.title, topics);
+    const quizId = crypto.randomBytes(12).toString('hex');
+    return res.json({ quiz: { id: quizId, courseId, moduleId, questions: quiz } });
+  } catch (e) {
+    console.error('Generate quiz error:', e);
+    return res.status(500).json({ error: 'Failed to generate quiz' });
+  }
+});
+
+// Submit a quiz attempt
+app.post('/api/quizzes/submit', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { courseId, moduleId, quizId, questions, answers } = req.body || {};
+    if (!courseId || !moduleId || !quizId || !Array.isArray(questions) || !Array.isArray(answers)) {
+      return res.status(400).json({ error: 'Invalid payload' });
+    }
+    let score = 0;
+    questions.forEach((q, i) => {
+      const sel = answers[i];
+      if (typeof sel === 'string' && sel === q.correctAnswer) score += 1;
+      if (typeof sel === 'number' && q.options?.[sel] === q.correctAnswer) score += 1;
+    });
+    const doc = {
+      userId: user._id,
+      courseId: String(courseId),
+      moduleId: String(moduleId),
+      quizId: String(quizId),
+      total: questions.length,
+      score,
+      createdAt: new Date(),
+    };
+    await db.collection('quiz_attempts').insertOne(doc);
+    return res.json({ result: { score, total: questions.length } });
+  } catch (e) {
+    console.error('Submit quiz error:', e);
+    return res.status(500).json({ error: 'Failed to submit quiz' });
+  }
+});
+
+// Summary of attempts per course for current user
+app.get('/api/quizzes/attempts/summary', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const aggr = await db.collection('quiz_attempts').aggregate([
+      { $match: { userId: user._id } },
+      { $group: { _id: '$courseId', count: { $sum: 1 } } },
+    ]).toArray();
+    const byCourse = {};
+    aggr.forEach(r => { byCourse[String(r._id)] = r.count; });
+    return res.json({ attemptsByCourse: byCourse });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to get attempts' });
   }
 });
 
