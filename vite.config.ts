@@ -9,14 +9,6 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
         proxy: {
-<<<<<<< HEAD
-          '/api': {
-            target: 'http://localhost:8765',
-            changeOrigin: true,
-          },
-        },
-        // Dev-only middleware for external APIs only
-=======
           '/api/auth': {
             target: `http://localhost:${env.PORT || '8765'}`,
             changeOrigin: true,
@@ -34,7 +26,6 @@ export default defineConfig(({ mode }) => {
           },
         },
         // Dev-only middleware for image helpers
->>>>>>> 4354663 (Improve PDF explainer visuals and branding)
         configureServer(server) {
           server.middlewares.use('/api/generate-image', async (req, res) => {
             if (req.method !== 'POST') {

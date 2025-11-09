@@ -32,6 +32,7 @@ const PIPELINE_STEPS: StepConfig[] = [
 ];
 
 const PdfExplainer: React.FC = () => {
+  const API_BASE = (typeof window !== 'undefined' && String(window.location?.origin || '').startsWith('file:')) ? 'http://localhost:8765' : '';
   const [file, setFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [stage, setStage] = useState<PipelineStage>('idle');
@@ -96,7 +97,7 @@ const PdfExplainer: React.FC = () => {
     }
     pollRef.current = window.setInterval(async () => {
       try {
-        const res = await fetch(`/api/pdf-explainer/status?jobId=${encodeURIComponent(id)}`);
+        const res = await fetch(`${API_BASE}/api/pdf-explainer/status?jobId=${encodeURIComponent(id)}`);
         if (!res.ok) {
           throw new Error('Failed to fetch job status.');
         }
@@ -156,13 +157,30 @@ const PdfExplainer: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/pdf-explainer/start', {
+      const maybeKey = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem('GEMINI_API_KEY') : null;
+      const headers: Record<string, string> = {};
+      if (maybeKey) headers['x-api-key'] = String(maybeKey);
+      const res = await fetch(`${API_BASE}/api/pdf-explainer/start`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
       if (!res.ok) {
-        throw new Error('Failed to start PDF explainer job.');
+        let serverMsg = '';
+        try {
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('application/json')) {
+            const body = await res.json();
+            serverMsg = String(body?.error || body?.message || '');
+          } else {
+            serverMsg = (await res.text())?.slice(0, 300);
+          }
+        } catch {
+          // ignore parse errors
+        }
+        const reason = serverMsg || `HTTP ${res.status} ${res.statusText}`;
+        throw new Error(`Failed to start PDF explainer job: ${reason}`);
       }
 
       const data: { jobId: string; status?: PipelineStage; message?: string } = await res.json();
@@ -173,9 +191,9 @@ const PdfExplainer: React.FC = () => {
       }
       startPolling(data.jobId);
     } catch (err) {
-      console.error(err);
+      console.error('PDF explainer start failed:', err);
       setStage('error');
-      setError('Upload failed. Please check your PDF and try again.');
+      setError(err instanceof Error ? err.message : 'Upload failed. Please check your PDF and try again.');
     }
   }, [file, startPolling]);
 

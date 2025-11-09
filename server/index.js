@@ -5,19 +5,80 @@ import cors from 'cors';
 import { MongoClient, ObjectId, GridFSBucket } from 'mongodb';
 import crypto from 'crypto';
 import multer from 'multer';
-<<<<<<< HEAD
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
-import { GoogleGenerativeAI } from '@google/generative-ai';
-=======
-import pdfParse from 'pdf-parse';
+let cachedPdfParseFn = null;
+async function getPdfParser() {
+  if (cachedPdfParseFn) return cachedPdfParseFn;
+
+  const resolveCtor = async () => {
+    const candidateSets = [];
+    try { candidateSets.push(require('pdf-parse')); } catch (err) { console.warn('[PDF Parser] require("pdf-parse") failed:', err?.message || err); }
+    try { candidateSets.push(await import('pdf-parse')); } catch (err) { console.warn('[PDF Parser] dynamic import pdf-parse failed:', err?.message || err); }
+    try { candidateSets.push(require('pdf-parse/lib/pdf-parse.js')); } catch (err) { console.warn('[PDF Parser] require("pdf-parse/lib/pdf-parse.js") failed:', err?.message || err); }
+    try { candidateSets.push(await import('pdf-parse/lib/pdf-parse.js')); } catch (err) { console.warn('[PDF Parser] dynamic import lib/pdf-parse.js failed:', err?.message || err); }
+
+    for (const mod of candidateSets) {
+      if (!mod) continue;
+      if (typeof mod === 'function') return mod;
+      if (typeof mod.default === 'function') return mod.default;
+      if (typeof mod.PDFParse === 'function') return mod.PDFParse;
+      if (mod.default && typeof mod.default.PDFParse === 'function') return mod.default.PDFParse;
+    }
+    return null;
+  };
+
+  const PDFParseCtor = await resolveCtor();
+  if (!PDFParseCtor) {
+    console.error('[PDF Parser] Unable to locate PDFParse constructor.');
+    return null;
+  }
+
+  cachedPdfParseFn = async (buffer) => {
+    const parser = new PDFParseCtor({ data: buffer });
+    try {
+      if (typeof parser.load === 'function') {
+        await parser.load();
+      }
+      const textResult = await parser.getText?.();
+      const text = textResult?.text || (Array.isArray(textResult?.pages) ? textResult.pages.map((p) => p.text || '').join('\n\n') : '');
+      const numpages = textResult?.total || textResult?.pages?.length || 0;
+      return { text, numpages }; 
+    } finally {
+      if (typeof parser.destroy === 'function') {
+        await parser.destroy().catch(() => {});
+      }
+    }
+  };
+
+  return cachedPdfParseFn;
+}
 import googleTTS from 'google-tts-api';
 import { GoogleGenAI, Type } from '@google/genai';
 import { Readable } from 'node:stream';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
+// Load environment variables. Prefer project root .env.local (../.env.local) if present,
+// then fall back to the default .env in this folder.
+try {
+  const envLocalUrl = new URL('../.env.local', import.meta.url);
+  const envLocalPath = fileURLToPath(envLocalUrl);
+  if (envLocalPath && fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath, override: true });
+    console.log('[Startup] Loaded env from', envLocalPath);
+  }
+} catch {}
+// Also try current working directory .env.local
+try {
+  const cwdEnv = path.join(process.cwd(), '.env.local');
+  if (fs.existsSync(cwdEnv)) {
+    dotenv.config({ path: cwdEnv, override: true });
+    console.log('[Startup] Loaded env from', cwdEnv);
+  }
+} catch {}
 dotenv.config();
->>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -26,16 +87,26 @@ app.use(express.json());
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/Lumo_AI';
 const PORT = Number(process.env.PORT) || 8765;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
-<<<<<<< HEAD
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+console.log('[Startup] GEMINI_API_KEY present:', GEMINI_API_KEY ? 'yes' : 'no');
+let ai = null;
+
+const getAI = () => {
+  if (ai) return ai;
+  const key = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+  if (!key) return null;
+  try {
+    ai = new GoogleGenAI({ apiKey: key });
+    console.log('[Startup] Initialized AI client from env at runtime');
+    return ai;
+  } catch (e) {
+    console.error('Failed to initialize AI client at runtime:', e?.message || e);
+    return null;
+  }
+};
 
 let db;
 let materialsBucket;
-=======
-const GEMINI_API_KEY = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
-const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-
-let db;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const pdfJobs = new Map();
 
@@ -60,7 +131,8 @@ const buildImageUrl = (prompt, idx = 0) => {
 };
 
 const generateSlidesFromGemini = async (jobId, text, originalName) => {
-  if (!ai) {
+  const client = getAI();
+  if (!client) {
     throw new Error('Gemini API key missing. Set API_KEY or GEMINI_API_KEY.');
   }
 
@@ -114,7 +186,7 @@ The PDF has ${pages.length || 1} pages. Here are excerpts to reference (do not i
 ${truncated}
 """`;
 
-  const response = await ai.models.generateContent({
+  const response = await client.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: prompt,
     config: {
@@ -192,7 +264,9 @@ const processPdfExplainerJob = async (jobId, buffer, originalName) => {
   try {
     updateJob(jobId, { status: 'analyzing', message: 'Analyzing PDF content…', progress: null });
 
-    const parsed = await pdfParse(buffer).catch((err) => {
+    const parser = await getPdfParser();
+    if (!parser) throw new Error('PDF parser not available. Ensure pdf-parse is installed.');
+    const parsed = await parser(buffer).catch((err) => {
       throw new Error(`Failed to read PDF: ${err?.message || err}`);
     });
     const text = String(parsed.text || '').trim();
@@ -282,8 +356,6 @@ const processPdfExplainerJob = async (jobId, buffer, originalName) => {
     updateJob(jobId, { status: 'error', message: 'Failed to generate explainer.', error: error?.message || 'Unknown error.' });
   }
 };
-
->>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 async function initDb() {
   const client = new MongoClient(MONGODB_URI);
   await client.connect();
@@ -370,7 +442,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // ---------- Courses persistence ----------
 
 // List all courses with modules and lectures
@@ -467,20 +538,6 @@ app.delete('/api/courses/:courseId/modules/:moduleId/lectures/:lectureId', async
     return res.status(500).json({ error: 'Failed to delete lecture' });
   }
 });
-=======
-app.get('/api/pdf-explainer/status', (req, res) => {
-  const jobId = String(req.query.jobId || '').trim();
-  if (!jobId) {
-    return res.status(400).json({ error: 'jobId is required.' });
-  }
-  const job = pdfJobs.get(jobId);
-  if (!job) {
-    return res.status(404).json({ error: 'Job not found' });
-  }
-  return res.json(job);
-});
-
->>>>>>> 4354663 (Improve PDF explainer visuals and branding)
 // Admin-only endpoint to create teacher accounts
 app.post('/api/admin/create-teacher', async (req, res) => {
   try {
@@ -562,7 +619,17 @@ app.post('/api/pdf-explainer/start', upload.single('file'), async (req, res) => 
     if (!req.file) {
       return res.status(400).json({ error: 'PDF file is required.' });
     }
-    if (!ai) {
+    // Allow overriding API key per-request via header
+    const headerKey = String(req.headers['x-api-key'] || '').trim();
+    if (headerKey) {
+      try {
+        ai = new GoogleGenAI({ apiKey: headerKey });
+        console.log('[Request] Initialized AI client from x-api-key header');
+      } catch (e) {
+        console.warn('Invalid x-api-key provided:', e?.message || e);
+      }
+    }
+    if (!getAI()) {
       return res.status(500).json({ error: 'Gemini API key is not configured.' });
     }
     const jobId = crypto.randomBytes(12).toString('hex');
@@ -651,11 +718,6 @@ app.get('/api/auth/me', async (req, res) => {
 
 // -------- Materials Upload & RAG ---------
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-});
-
 function chunkText(text, chunkSize = 800, overlap = 100) {
   const chunks = [];
   let i = 0;
@@ -670,11 +732,30 @@ function chunkText(text, chunkSize = 800, overlap = 100) {
 }
 
 const embeddingModelName = 'text-embedding-004';
-const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
+let embeddingsClient = null;
+async function getEmbeddingsClient() {
+  if (embeddingsClient) return embeddingsClient;
+  const key = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+  if (!key) return null;
+  try {
+    const mod = await import('@google/generative-ai');
+    const GoogleGenerativeAI = mod?.GoogleGenerativeAI;
+    if (!GoogleGenerativeAI) {
+      console.warn('[Embeddings] @google/generative-ai not available');
+      return null;
+    }
+    embeddingsClient = new GoogleGenerativeAI(key);
+    return embeddingsClient;
+  } catch (e) {
+    console.warn('[Embeddings] Failed to init embeddings client:', e?.message || e);
+    return null;
+  }
+}
 
 async function embedTexts(texts) {
-  if (!genAI) throw new Error('GEMINI_API_KEY not configured');
-  const model = genAI.getGenerativeModel({ model: embeddingModelName });
+  const client = await getEmbeddingsClient();
+  if (!client) throw new Error('GEMINI_API_KEY not configured');
+  const model = client.getGenerativeModel({ model: embeddingModelName });
   const out = [];
   for (const t of texts) {
     const r = await model.embedContent(t);
@@ -720,7 +801,9 @@ app.post('/api/materials/upload', upload.single('file'), async (req, res) => {
     const ins = await db.collection('materials').insertOne(materialDoc);
 
     try {
-      const parsed = await pdfParse(file.buffer).catch(() => ({ text: '' }));
+      const parser = await getPdfParser();
+      if (!parser) throw new Error('PDF parser not available. Ensure pdf-parse is installed.');
+      const parsed = await parser(file.buffer).catch(() => ({ text: '' }));
       const text = (parsed.text || '').replace(/\s+/g, ' ').trim();
       if (!text) {
         console.warn('[Materials] No extractable text found for material', ins.insertedId?.toString?.());

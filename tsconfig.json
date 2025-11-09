@@ -25,5 +25,10 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "types/**/*.d.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }
