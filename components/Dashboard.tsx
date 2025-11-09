@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { User, Course, CourseModule, VideoDraft, AppView } from '../types';
 import { Role } from '../types';
 import Button from './common/Button';
 import { DeleteIcon, SparklesIcon, QuestionIcon } from './Icons';
 import Loader from './common/Loader';
 import { generateCourseModules } from '../services/geminiService';
+import { deleteCourse as apiDeleteCourse } from '../services/coursesService';
 import { uploadMaterial, listMaterials } from '../services/materialsService';
+import { generateQuiz, submitQuiz, getAttemptsSummary, getLastAttempt } from '../services/quizService';
 
 interface DashboardProps {
     user: User;
@@ -34,6 +36,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const [materialsByModule, setMaterialsByModule] = useState<Record<string, Array<{ id: string; title: string; size: number; mime: string; indexed: boolean; createdAt: string }>>>({});
     const [draftCourse, setDraftCourse] = useState<{ subject: string; modules: CourseModule[] } | null>(null);
     const [catalogQuery, setCatalogQuery] = useState('');
+    const [attemptsByCourse, setAttemptsByCourse] = useState<Record<string, number>>({});
+    const [lastByModule, setLastByModule] = useState<Record<string, { score: number; total: number; createdAt: string }>>({});
+    const [activeQuiz, setActiveQuiz] = useState<{ courseId: string; moduleId: string; quizId: string; questions: Array<{ question: string; options: string[]; correctAnswer: string }>; answers: Array<number|null>; submitting: boolean; endAt: number; left: number; error?: string } | null>(null);
     // Videos view state (must be top-level to satisfy Hooks rules)
     const myCourses = useMemo(() => courses.filter(c => enrolledCourseIds.includes(c.id)), [courses, enrolledCourseIds]);
     const [selCourseId, setSelCourseId] = useState<string>('');
@@ -41,6 +46,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const [customTopic, setCustomTopic] = useState('');
     const [customFile, setCustomFile] = useState<File | null>(null);
     const [isUp, setIsUp] = useState(false);
+
+    const handleDeleteCourse = async (courseId: string) => {
+        if (!window.confirm('Delete this course and all associated data? This cannot be undone.')) return;
+        try {
+            await apiDeleteCourse(courseId);
+            onRefreshCourses?.();
+        } catch (e) {
+            alert('Failed to delete course');
+        }
+    };
 
     // Precompute all videos for the student_videos view (must not be inside a conditional to satisfy Hooks rules)
     const allVideos = useMemo(() => {
@@ -57,6 +72,61 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const toggleModule = (moduleId: string) => {
         setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
     };
+
+    // load attempts summary for student
+    useEffect(() => {
+        if (user.role !== Role.Student) return;
+        (async () => {
+            try { setAttemptsByCourse(await getAttemptsSummary()); } catch { setAttemptsByCourse({}); }
+        })();
+    }, [user.role]);
+
+    const startQuiz = async (courseId: string, moduleId: string) => {
+        try {
+            const q = await generateQuiz(courseId, moduleId);
+            const endAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+            setActiveQuiz({ courseId, moduleId, quizId: q.id, questions: q.questions, answers: new Array(q.questions.length).fill(null), submitting: false, endAt, left: 5*60 });
+        } catch (e:any) {
+            setActiveQuiz({ courseId, moduleId, quizId: '', questions: [], answers: [], submitting: false, endAt: 0, left: 0, error: String(e?.message || 'Failed to generate quiz') });
+        }
+    };
+
+    const setAnswer = (idx: number, val: number) => {
+        setActiveQuiz(prev => prev ? { ...prev, answers: prev.answers.map((a, i) => i === idx ? val : a) } : prev);
+    };
+
+    const submitActiveQuiz = async () => {
+        if (!activeQuiz) return;
+        const a = activeQuiz;
+        try {
+            setActiveQuiz({ ...a, submitting: true });
+            const result = await submitQuiz({ courseId: a.courseId, moduleId: a.moduleId, quizId: a.quizId, questions: a.questions, answers: a.answers.map(x => (typeof x === 'number' ? x : -1)) });
+            alert(`Score: ${result.score}/${result.total}`);
+            try { setAttemptsByCourse(await getAttemptsSummary()); } catch {}
+            try { const last = await getLastAttempt(a.courseId, a.moduleId); if (last) setLastByModule(prev => ({ ...prev, [a.moduleId]: last })); } catch {}
+        } catch {}
+        setActiveQuiz(null);
+    };
+
+    // countdown effect for quiz timer
+    useEffect(() => {
+        if (!activeQuiz || !activeQuiz.endAt) return;
+        const id = setInterval(() => {
+            setActiveQuiz(prev => {
+                if (!prev) return prev;
+                const left = Math.max(0, Math.floor((prev.endAt - Date.now())/1000));
+                return { ...prev, left };
+            });
+        }, 1000);
+        return () => clearInterval(id);
+    }, [activeQuiz?.quizId]);
+
+    useEffect(() => {
+        if (activeQuiz && activeQuiz.left === 0 && !activeQuiz.submitting && activeQuiz.questions.length) {
+            submitActiveQuiz();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeQuiz?.left]);
 
     const handleCreateCourse = async () => {
         if (!newCourseSubject.trim()) return;
@@ -205,7 +275,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                         .filter(c => (catalogQuery ? c.title.toLowerCase().includes(catalogQuery.toLowerCase()) : true))
                         .map(course => (
                         <div key={course.id} className="bg-card border border-border rounded-lg p-6">
-                            <h3 className="text-2xl font-semibold mb-4">{course.title}</h3>
+                            <div className="flex items-start justify-between mb-4">
+                                <h3 className="text-2xl font-semibold">{course.title}</h3>
+                                <Button variant="danger" size="sm" onClick={() => handleDeleteCourse(course.id)}>Delete</Button>
+                            </div>
                             <div className="space-y-4">
                                 {course.modules.map(module => (
                                     <div key={module.id} className="border-t border-border pt-4">
@@ -405,6 +478,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
             <>
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-3xl font-bold">My Courses</h2>
+                    {onRefreshCourses && (
+                        <Button size="sm" variant="secondary" onClick={onRefreshCourses}>Refresh</Button>
+                    )}
                 </div>
                 {myCourses.length > 0 ? (
                     <div className="space-y-6">
@@ -414,10 +490,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                     <h3 className="text-2xl font-semibold">{course.title}</h3>
                                     <span className="text-xs px-2 py-1 rounded bg-foreground text-background">Enrolled</span>
                                 </div>
+                                {attemptsByCourse[course.id] ? (
+                                    <p className="text-xs text-muted-foreground mb-2">Attempts: {attemptsByCourse[course.id]}</p>
+                                ) : null}
                                 <div className="space-y-4">
                                     {course.modules.map(module => (
                                         <div key={module.id} className="border-t border-border pt-4">
-                                            <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleModule(module.id)}>
+                                            <div className="flex justify-between items-center cursor-pointer" onClick={() => { toggleModule(module.id); loadMaterials(course.id, module.id); }}>
                                                 <div>
                                                     <h4 className="text-lg font-semibold">{module.title}</h4>
                                                     <p className="text-sm text-muted-foreground">{module.description}</p>
@@ -438,22 +517,43 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                         ))
                                                     ) : <p className="text-sm text-muted-foreground italic">Lectures for this module are coming soon.</p>}
 
+                                                    
+
                                                     <div className="pt-2">
-                                                        <p className="text-sm font-medium mb-2">Generate a new AI video by topic</p>
-                                                        {(module.topics || []).length > 0 ? (
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {(module.topics || []).map(topic => (
-                                                                    <Button
-                                                                        key={topic}
-                                                                        size="sm"
-                                                                        onClick={() => onGenerateLectureClick(course, module, topic)}
-                                                                    >
-                                                                        {`Generate: ${topic}`}
-                                                                    </Button>
+                                                        <p className="text-sm font-medium mb-2">Practice</p>
+                                                        <Button size="sm" variant="secondary" onClick={() => startQuiz(course.id, module.id)}>Generate Quiz</Button>
+                                                        {activeQuiz && activeQuiz.courseId === course.id && activeQuiz.moduleId === module.id && (
+                                                            <div className="mt-3 p-3 border border-border rounded-md bg-background">
+                                                                {activeQuiz.error ? (
+                                                                    <p className="text-sm text-red-500 mb-2">{activeQuiz.error}</p>
+                                                                ) : null}
+                                                                {!activeQuiz.error && (
+                                                                <div className="flex justify-between items-center mb-2">
+                                                                    <span className="text-xs text-muted-foreground">Time left</span>
+                                                                    <span className="text-sm font-semibold">{String(Math.floor((activeQuiz.left||0)/60)).padStart(2,'0')}:{String((activeQuiz.left||0)%60).padStart(2,'0')}</span>
+                                                                </div>
+                                                                )}
+                                                                {activeQuiz.questions.map((q, i) => (
+                                                                    <div key={i} className="mb-3">
+                                                                        <p className="text-sm font-medium">Q{i+1}. {q.question}</p>
+                                                                        <div className="mt-1 space-y-1">
+                                                                            {q.options.map((opt, oi) => (
+                                                                                <label key={oi} className="flex items-center gap-2 text-sm">
+                                                                                    <input type="radio" name={`q${i}`} checked={activeQuiz.answers[i]===oi} onChange={() => setAnswer(i, oi)} />
+                                                                                    <span>{opt}</span>
+                                                                                </label>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
                                                                 ))}
+                                                                <div className="flex gap-2">
+                                                                    <Button size="sm" onClick={submitActiveQuiz} disabled={activeQuiz.submitting}>Submit</Button>
+                                                                    <Button size="sm" variant="secondary" onClick={() => setActiveQuiz(null)} disabled={activeQuiz.submitting}>Cancel</Button>
+                                                                </div>
                                                             </div>
-                                                        ) : (
-                                                            <p className="text-sm text-muted-foreground italic">No topics available for generation.</p>
+                                                        )}
+                                                        {lastByModule[module.id] && (
+                                                            <p className="text-xs text-muted-foreground mt-2">Last score: {lastByModule[module.id].score}/{lastByModule[module.id].total}</p>
                                                         )}
                                                     </div>
                                                 </div>

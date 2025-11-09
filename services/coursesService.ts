@@ -56,3 +56,22 @@ export async function updateModuleTopics(courseId: string, moduleId: string, top
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || 'Failed to update topics');
 }
+
+export async function updateCourse(courseId: string, payload: { title?: string; description?: string }): Promise<void> {
+  const res = await fetch(`${BASE}/${encodeURIComponent(courseId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'Failed to update course');
+}
+
+export async function deleteCourse(courseId: string): Promise<void> {
+  const res = await fetch(`${BASE}/${encodeURIComponent(courseId)}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'Failed to delete course');
+}
