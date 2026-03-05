@@ -2,9 +2,18 @@ import { GoogleGenAI, Chat, Type, GenerateContentResponse, Modality } from "@goo
 import { QuizQuestion, Slide, ModuleOutline } from '../types';
 import { createAudioUrlFromBase64 } from './audioUtils';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-let chat: Chat;
+// Lazily init AI to prevent crash if key is missing at module load time
+const getAI = () => {
+    const key = process.env.API_KEY;
+    if (!key) {
+        console.warn("Google GenAI API Key is missing. AI features will fail.");
+        // We throw here or return a dummy. Throwing ensures we don't try to use an invalid client.
+        throw new Error("Missing API Key");
+    }
+    return new GoogleGenAI({ apiKey: key });
+};
 
+let chat: Chat;
 
 interface DraftContentsResponse {
     title: string;
@@ -107,12 +116,12 @@ const inferVisualTheme = (keywords: string[], description?: string): string => {
 
 
 export const startChat = () => {
-  chat = ai.chats.create({
-    model: 'gemini-2.5-flash',
-    config: {
-      systemInstruction: "You are Lumo, a friendly and helpful AI study assistant for a learning platform. Keep your answers concise and focused on educational topics. When asked about non-academic subjects, politely steer the conversation back to learning."
-    }
-  });
+    chat = getAI().chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+            systemInstruction: "You are Lumo, a friendly and helpful AI study assistant for a learning platform. Keep your answers concise and focused on educational topics. When asked about non-academic subjects, politely steer the conversation back to learning."
+        }
+    });
 };
 
 export const generateImagesForSlidesViaPexels = async (
@@ -137,73 +146,55 @@ export const generateImagesForSlidesViaPexels = async (
         } catch (e) {
             results.push('');
         }
-        
+
         await delay(200);
     }
     return results;
 };
 
 export const sendMessageToChatbot = async (message: string): Promise<string> => {
-  if (!chat) {
-    startChat();
-  }
-  try {
-    const response: GenerateContentResponse = await chat.sendMessage({ message });
-    return response.text;
-  } catch (error) {
-    console.error("Error sending message to chatbot:", error);
-    throw new Error("Failed to get a a response from the AI assistant.");
-  }
+    if (!chat) {
+        startChat();
+    }
+    try {
+        const response: GenerateContentResponse = await chat.sendMessage({ message });
+        return response.text;
+    } catch (error) {
+        console.error("Error sending message to chatbot:", error);
+        throw new Error("Failed to get a a response from the AI assistant.");
+    }
 };
 
 export const generateCourseModules = async (subject: string): Promise<ModuleOutline[]> => {
-    const model = 'gemini-2.5-flash';
-    const prompt = `You are an expert curriculum designer for university-level Computer Science. A teacher wants to create a course on the subject: "${subject}".
-    Propose a logical structure for this course by breaking it down into 5 to 7 distinct modules.
-    For each module, provide a concise title and a one-sentence description of its content.
-    Return the result as a single JSON object with a key "modules" which is an array of module objects. Each module object must have "title" and "description" properties.`;
-
     try {
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        modules: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    description: { type: Type.STRING }
-                                },
-                                required: ["title", "description"]
-                            }
-                        }
-                    },
-                    required: ["modules"]
-                }
-            }
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('Not authenticated');
+
+        const res = await fetch('/api/ai/generate-course-outline', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ subject })
         });
-        const jsonText = response.text.trim();
-        const outlineData = JSON.parse(jsonText);
-        
-        if (!outlineData.modules) {
-             throw new Error("AI response did not contain a valid module outline.");
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to generate outline');
         }
-        return outlineData.modules;
+
+        const data = await res.json();
+        return data.modules; // Now includes 'topics' (lectures) too
     } catch (error) {
         console.error("Error generating course modules:", error);
-        throw new Error("Failed to generate the course modules.");
+        throw error;
     }
 };
 
 // Updated to generate 20 slides for a specific module within a course.
 export const generateLectureForModule = async (courseTitle: string, module: ModuleOutline, topic?: string, context?: string): Promise<DraftContentsResponse> => {
-    const model = 'gemini-2.5-flash'; 
+    const model = 'gemini-2.5-flash';
 
     const prompt = `You are an expert in Computer Science education. Create the content for a single, focused video lecture.
     This lecture is part of a larger university-level course titled "${courseTitle}".
@@ -224,7 +215,7 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
     4.  "quiz": An array of exactly 10 multiple-choice quiz questions based on this lecture's slide content. Each question object must have "question", "options" (an array of 4), and "correctAnswer".`;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await getAI().models.generateContent({
             model: model,
             contents: prompt,
             config: {
@@ -268,14 +259,14 @@ export const generateLectureForModule = async (courseTitle: string, module: Modu
                 },
             }
         });
-        
+
         const jsonText = response.text.trim();
         const draftData = JSON.parse(jsonText);
 
         if (!draftData.title || !draftData.slides || !draftData.quiz) {
             throw new Error("AI response is missing required fields.");
         }
-        
+
         const topicContext = `${module.title} ${module.description ?? ''}`.trim();
         const slides = (draftData.slides ?? []).map((slide) => {
             const snippetLanguageKeyword = slide.snippetLanguage ? `${slide.snippetLanguage} code` : undefined;
@@ -358,7 +349,7 @@ export const generateImagesForSlidesViaOpenRouter = async (
  * @returns An array of audio blob URLs.
  */
 export const generateAudioForSlides = async (
-    slides: Slide[], 
+    slides: Slide[],
     onProgress: (current: number, total: number) => void
 ): Promise<string[]> => {
     const audioUrls: string[] = [];
@@ -383,7 +374,7 @@ export const generateAudioForSlides = async (
         while (!success && attempts < 3) {
             attempts++;
             try {
-                const response = await ai.models.generateContent({
+                const response = await getAI().models.generateContent({
                     model: "gemini-2.5-flash-preview-tts",
                     contents: [{ parts: [{ text: `Say clearly and engagingly: ${slide.description}` }] }],
                     config: {
@@ -409,14 +400,58 @@ export const generateAudioForSlides = async (
                 console.error(`Error generating audio for slide ${slideIndex}:`, error);
                 audioUrls.push("");
                 if (isRateLimited) {
-                    
+
                     hitGlobalRateLimit = true;
                 }
                 break;
             }
         }
-        await delay(5000); 
+        await delay(5000);
     }
 
     return audioUrls;
+};
+
+export const generateCodingChallenges = async (topics: string[], focus?: string): Promise<any[]> => {
+    try {
+        const res = await fetch('/api/ai/game/coding', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topics, focus })
+        });
+        return await res.json();
+    } catch (error) {
+        console.error("Error generating coding challenges:", error);
+        return [
+            { id: 1, title: "System Reboot", scenario: "The server is recharging.", question: "Wait a moment and try again.", code: "", answer: "wait", difficulty: "Easy", hint: "Network error." }
+        ];
+    }
+};
+
+export const generateVoxelQuest = async (topics: string[], focus?: string): Promise<any[]> => {
+    try {
+        const res = await fetch('/api/ai/game/voxel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topics, focus })
+        });
+        return await res.json();
+    } catch (error) {
+        console.error("Error generating voxel quest:", error);
+        return [];
+    }
+};
+
+export const generateStudyCards = async (topics: string[], focus?: string): Promise<any[]> => {
+    try {
+        const res = await fetch('/api/ai/game/cards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topics, focus })
+        });
+        return await res.json();
+    } catch (error) {
+        console.error("Error generating study cards:", error);
+        return [];
+    }
 };

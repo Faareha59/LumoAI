@@ -1,7 +1,7 @@
 import { VideoDraft, Slide } from '../types';
 import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js' as any;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
@@ -64,7 +64,33 @@ async function loadPdfDocumentFromDraft(draft: VideoDraft): Promise<pdfjsLib.PDF
   }
 }
 
-async function renderPdfPageToDataUrl(
+/**
+ * Polyfill for roundRect which is missing in some older browsers
+ */
+function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number | number[]) {
+  if (typeof (ctx as any).roundRect === 'function') {
+    (ctx as any).roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  // Basic fallback if roundRect is missing
+  let r = 0;
+  if (Array.isArray(radius)) r = radius[0] || 0;
+  else r = radius;
+
+  if (width < 2 * r) r = width / 2;
+  if (height < 2 * r) r = height / 2;
+
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+export async function renderPdfPageToDataUrl(
   pdf: pdfjsLib.PDFDocumentProxy,
   pageNumber: number,
   targetWidth = PDF_SNAPSHOT_WIDTH
@@ -81,6 +107,10 @@ async function renderPdfPageToDataUrl(
       page.cleanup();
       return null;
     }
+    if (viewport.width <= 0) {
+      console.warn('Invalid PDF viewport width');
+      return null;
+    }
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     await page.render({ canvasContext: context, viewport }).promise;
@@ -88,7 +118,7 @@ async function renderPdfPageToDataUrl(
     page.cleanup();
     return dataUrl;
   } catch (err) {
-    console.warn('Failed to render PDF page snapshot:', err);
+    console.error('Failed to render PDF page snapshot:', err);
     return null;
   }
 }
@@ -232,8 +262,7 @@ function drawKeywordChips(
 
     ctx.save();
     ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.roundRect(currentX, currentY, chipWidth, chipHeight, 999);
+    drawRoundedRect(ctx, currentX, currentY, chipWidth, chipHeight, 999);
     ctx.fill();
 
     ctx.fillStyle = textColorOverride ?? 'rgba(15, 23, 42, 0.85)';
@@ -253,8 +282,7 @@ function drawSidebarRibbons(ctx: CanvasRenderingContext2D, tags: string[], width
   ctx.save();
   ctx.globalAlpha = 0.25;
   ctx.fillStyle = '#1e3a8a';
-  ctx.beginPath();
-  ctx.roundRect(sidebarX - 12, baseY - 40, sidebarWidth + 24, ribbonHeight * tags.length + 80, 28);
+  drawRoundedRect(ctx, sidebarX - 12, baseY - 40, sidebarWidth + 24, ribbonHeight * tags.length + 80, 28);
   ctx.fill();
   ctx.restore();
 
@@ -269,8 +297,7 @@ function drawSidebarRibbons(ctx: CanvasRenderingContext2D, tags: string[], width
     gradient.addColorStop(1, `hsla(${(hue + 25) % 360}, 75%, 65%, 0.65)`);
 
     ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.roundRect(sidebarX, y, sidebarWidth, ribbonHeight - 12, 18);
+    drawRoundedRect(ctx, sidebarX, y, sidebarWidth, ribbonHeight - 12, 18);
     ctx.fill();
 
     ctx.fillStyle = 'rgba(15,23,42,0.92)';
@@ -302,14 +329,12 @@ function drawCodeSnippet(
   ctx.shadowColor = 'rgba(8, 13, 28, 0.35)';
   ctx.shadowBlur = 18;
   ctx.shadowOffsetY = 14;
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, blockHeight, 18);
+  drawRoundedRect(ctx, x, y, width, blockHeight, 18);
   ctx.fill();
 
   ctx.strokeStyle = theme.mediaBorder[0];
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, blockHeight, 18);
+  drawRoundedRect(ctx, x, y, width, blockHeight, 18);
   ctx.stroke();
 
   ctx.restore();
@@ -317,8 +342,7 @@ function drawCodeSnippet(
   if (language) {
     ctx.save();
     ctx.fillStyle = theme.chipGradient[0];
-    ctx.beginPath();
-    ctx.roundRect(x + padding / 2, y + padding / 2, 120, headerHeight - padding / 2, 12);
+    drawRoundedRect(ctx, x + padding / 2, y + padding / 2, 120, headerHeight - padding / 2, 12);
     ctx.fill();
     ctx.fillStyle = theme.chipText;
     ctx.font = '600 18px "JetBrains Mono", "Fira Code", "Consolas", monospace';
@@ -365,14 +389,12 @@ function drawPdfExcerpt(
 
   ctx.save();
   ctx.fillStyle = 'rgba(148, 163, 184, 0.14)';
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, height, 18);
+  drawRoundedRect(ctx, x, y, width, height, 18);
   ctx.fill();
 
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, height, 18);
+  drawRoundedRect(ctx, x, y, width, height, 18);
   ctx.stroke();
   ctx.restore();
 
@@ -432,8 +454,7 @@ function drawPdfSnapshot(
   const radius = 24;
 
   ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, targetHeight, radius);
+  drawRoundedRect(ctx, x, y, width, targetHeight, radius);
   ctx.clip();
 
   const coverScale = Math.max(width / image.width, targetHeight / image.height);
@@ -450,16 +471,14 @@ function drawPdfSnapshot(
   stroke.addColorStop(1, theme.cardStroke[1]);
   ctx.lineWidth = 2;
   ctx.strokeStyle = stroke;
-  ctx.beginPath();
-  ctx.roundRect(x, y, width, targetHeight, radius);
+  drawRoundedRect(ctx, x, y, width, targetHeight, radius);
   ctx.stroke();
   ctx.restore();
 
   if (page) {
     ctx.save();
     ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
-    ctx.beginPath();
-    ctx.roundRect(x + 18, y + 18, 140, 40, 14);
+    drawRoundedRect(ctx, x + 18, y + 18, 140, 40, 14);
     ctx.fill();
     ctx.font = '600 17px "Segoe UI", system-ui, -apple-system, sans-serif';
     ctx.fillStyle = theme.headingLabel;
@@ -629,14 +648,28 @@ const THEME_STYLES: Record<string, ThemeStyle> = {
     progressFill: 'rgba(6, 182, 212, 0.9)',
     mediaBorder: ['rgba(6, 182, 212, 0.85)', 'rgba(14, 165, 233, 0.65)'],
   },
+  'blackboard': {
+    ...BASE_THEME_STYLE,
+    background: ['#0f172a', '#020617'],
+    overlay: ['rgba(15, 23, 42, 0.4)', 'rgba(2, 6, 23, 0.7)'],
+    cardFill: 'transparent',
+    cardStroke: ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)'],
+    headingLabel: '#38bdf8',
+    headingText: '#ffffff',
+    summaryText: '#94a3b8',
+    bulletColor: '#38bdf8',
+    chipGradient: ['#38bdf8', '#0ea5e9'],
+    progressFill: '#38bdf8',
+    mediaBorder: ['rgba(56, 189, 248, 0.5)', 'rgba(56, 189, 248, 0.2)'],
+  },
 };
 
-const getThemeStyle = (theme?: string): ThemeStyle => {
+export const getThemeStyle = (theme?: string): ThemeStyle => {
   if (!theme) return BASE_THEME_STYLE;
   return THEME_STYLES[theme] ?? BASE_THEME_STYLE;
 };
 
-function drawSlide(
+export function drawSlide(
   ctx: CanvasRenderingContext2D,
   slide: Slide,
   backgroundImage: HTMLImageElement | null,
@@ -645,217 +678,151 @@ function drawSlide(
   height: number,
   slideIndex: number,
   totalSlides: number,
-  progress: number
+  progress: number,
+  showCaption = true
 ) {
-  ctx.clearRect(0, 0, width, height);
+  const themeStyle = getThemeStyle(slide.visualTheme || 'blackboard');
 
-  const themeStyle = getThemeStyle(slide.visualTheme);
-
-  const backgroundGradient = ctx.createLinearGradient(0, 0, width, height);
-  backgroundGradient.addColorStop(0, themeStyle.background[0]);
-  backgroundGradient.addColorStop(1, themeStyle.background[1]);
-  ctx.fillStyle = backgroundGradient;
+  // Background Gradient
+  const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+  bgGrad.addColorStop(0, themeStyle.background[0]);
+  bgGrad.addColorStop(1, themeStyle.background[1]);
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  if (backgroundImage) {
-    const imgW = backgroundImage.width;
-    const imgH = backgroundImage.height;
-    const canvasRatio = width / height;
-    const imgRatio = imgW / imgH;
-    let dw = width;
-    let dh = height;
-    let dx = 0;
-    let dy = 0;
-    if (imgRatio > canvasRatio) {
-      dh = height;
-      dw = imgRatio * dh;
-      dx = (width - dw) / 2;
-    } else {
-      dw = width;
-      dh = dw / imgRatio;
-      dy = (height - dh) / 2;
-    }
+  // Smooth Easing
+  const easeInOut = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  const easedProg = easeInOut(progress);
 
+  // Background Abstract Shapes (Floating & Slow)
+  ctx.save();
+  const shapeOpacity = 0.15 + Math.sin(progress * Math.PI) * 0.05;
+  ctx.globalAlpha = shapeOpacity;
+  const drift = easedProg * 35;
+
+  ctx.fillStyle = themeStyle.progressFill;
+  // Top Shape
+  ctx.beginPath();
+  ctx.arc(width * 0.88, -120 + drift, 360, 0, Math.PI);
+  ctx.fill();
+
+  // Bottom Shape
+  ctx.beginPath();
+  ctx.arc(width * 0.12, height + 120 - drift, 360, Math.PI, 0);
+  ctx.fill();
+  ctx.restore();
+
+  if (backgroundImage) {
     ctx.save();
-    ctx.globalAlpha = 0.45;
-    ctx.drawImage(backgroundImage, dx, dy, dw, dh);
+    ctx.globalAlpha = 0.15;
+    const zoom = 1 + progress * 0.04;
+    ctx.drawImage(backgroundImage, (width - width * zoom) / 2, (height - height * zoom) / 2, width * zoom, height * zoom);
     ctx.restore();
   }
 
-  const vignette = ctx.createRadialGradient(width / 2, height / 2, width * 0.1, width / 2, height / 2, width * 0.7);
-  vignette.addColorStop(0, 'rgba(12, 19, 35, 0.1)');
-  vignette.addColorStop(1, 'rgba(11, 17, 30, 0.85)');
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, width, height);
+  const hasSecondaryContent = !!(slide.codeSnippet || snapshotImage || slide.pdfExcerpt || (slide.keywords && slide.keywords.length > 0));
+  const centerX = width / 2;
+  const padding = 110;
 
-  const overlayGradient = ctx.createLinearGradient(0, 0, width, 0);
-  overlayGradient.addColorStop(0, themeStyle.overlay[0]);
-  overlayGradient.addColorStop(1, themeStyle.overlay[1]);
-  ctx.fillStyle = overlayGradient;
-  ctx.fillRect(0, 0, width, height);
+  if (!hasSecondaryContent) {
+    // Cinematic Centered Layout (Like an Intro/Outro)
+    const titleMaxWidth = width * 0.85;
+    const titleY = height * 0.42;
 
-  const hasSnapshot = Boolean(snapshotImage);
-  const cardWidth = hasSnapshot ? width * 0.78 : width * 0.66;
-  const cardHeight = height * (hasSnapshot ? 0.76 : 0.74);
-  const cardX = hasSnapshot ? (width - cardWidth) / 2 : width * 0.085;
-  const cardY = height * 0.13;
+    ctx.save();
+    const titleAlpha = Math.min(0.2 + progress * 4, 1);
+    ctx.globalAlpha = titleAlpha;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-  ctx.save();
-  ctx.shadowColor = themeStyle.shadow;
-  ctx.shadowBlur = 38;
-  ctx.shadowOffsetY = 22;
-  ctx.fillStyle = themeStyle.cardFill;
-  ctx.beginPath();
-  ctx.roundRect(cardX, cardY, cardWidth, cardHeight, 28);
-  ctx.fill();
-  ctx.restore();
+    const heading = slide.heading || 'Subject Matter';
+    const titleFontSize = heading.length > 45 ? 42 : 64;
+    ctx.font = `700 ${titleFontSize}px "Inter", "Segoe UI", sans-serif`;
 
-  const accentGradient = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardHeight);
-  accentGradient.addColorStop(0, themeStyle.cardStroke[0]);
-  accentGradient.addColorStop(1, themeStyle.cardStroke[1]);
-
-  ctx.save();
-  ctx.strokeStyle = accentGradient;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.roundRect(cardX + 2, cardY + 2, cardWidth - 4, cardHeight - 4, 24);
-  ctx.stroke();
-  ctx.restore();
-
-  const heading = slide.heading?.trim() || 'Key Insight';
-  const summarySource = (slide.voiceover && slide.voiceover.trim()) || slide.description || '';
-
-  const innerPadding = 36;
-  const innerWidth = cardWidth - innerPadding * 2;
-
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = themeStyle.headingText;
-  ctx.font = '700 52px "Segoe UI", system-ui, -apple-system, sans-serif';
-  const headingHeight = wrapText(ctx, heading, cardX + innerPadding, cardY + innerPadding, innerWidth, 58);
-
-  const contentTop = cardY + innerPadding + Math.max(headingHeight, 52) + 18;
-  const primaryImage = snapshotImage || backgroundImage;
-
-  ctx.fillStyle = themeStyle.summaryText;
-  const summarySegments = summarySource
-    .split(/[\.;\n]/)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-
-  if (hasSnapshot) {
-    const gutter = 28;
-    const textWidth = Math.max(innerWidth * 0.5 - gutter / 2, innerWidth * 0.38);
-    const imageWidth = innerWidth - textWidth - gutter;
-    const textX = cardX + innerPadding;
-    const imageX = textX + textWidth + gutter;
-    const maxImageHeight = Math.max(cardHeight - (contentTop - cardY) - innerPadding, 120);
-    const imageHeight = drawPdfSnapshot(
-      ctx,
-      snapshotImage!,
-      slide.pdfPage,
-      imageX,
-      contentTop,
-      imageWidth,
-      maxImageHeight,
-      themeStyle
-    );
-
-    const bulletHeight = drawBulletList(ctx, summarySegments, textX, contentTop, textWidth, 40, themeStyle.bulletColor);
-    let textCursor = contentTop + (bulletHeight || 0);
-
-    if (slide.pdfExcerpt) {
-      const excerptAvailable = maxImageHeight - (bulletHeight || 0) - 20;
-      const excerptHeight = Math.min(Math.max(excerptAvailable, 0), Math.min(cardHeight * 0.35, 220));
-      if (excerptHeight >= 80) {
-        textCursor += 20;
-        drawPdfExcerpt(ctx, slide.pdfExcerpt, slide.pdfPage, textX, textCursor, textWidth, excerptHeight, themeStyle);
-      }
-    }
+    wrapText(ctx, heading, centerX, titleY, titleMaxWidth, titleFontSize * 1.3);
+    ctx.restore();
   } else {
-    if (primaryImage) {
-      const imageX = cardX + innerPadding;
-      const imageHeight = drawPdfSnapshot(
-        ctx,
-        primaryImage,
-        snapshotImage ? slide.pdfPage : undefined,
-        imageX,
-        contentTop,
-        innerWidth,
-        cardHeight * 0.42,
-        themeStyle
-      );
-      const textStart = contentTop + imageHeight + 30;
-      const bulletHeight = drawBulletList(ctx, summarySegments, imageX + 8, textStart, innerWidth - 16, 40, themeStyle.bulletColor);
-      if (slide.pdfExcerpt) {
-        const excerptHeight = Math.min(cardHeight * 0.26, 220);
-        const excerptY = textStart + (bulletHeight ? bulletHeight + 16 : 0);
-        drawPdfExcerpt(ctx, slide.pdfExcerpt, slide.pdfPage, imageX, excerptY, innerWidth, excerptHeight, themeStyle);
-      }
-    } else {
-      ctx.save();
-      ctx.fillStyle = 'rgba(51, 65, 85, 0.22)';
-      const placeholderHeight = cardHeight * 0.2;
-      const placeholderX = cardX + innerPadding;
-      ctx.beginPath();
-      ctx.roundRect(placeholderX, contentTop, innerWidth, placeholderHeight, 20);
-      ctx.fill();
-      ctx.font = '600 24px "Segoe UI", system-ui, -apple-system, sans-serif';
-      ctx.fillStyle = themeStyle.headingLabel;
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Visual will appear here after export', placeholderX + 24, contentTop + placeholderHeight / 2);
-      ctx.restore();
+    // Two-Column Split Layout
+    const leftMargin = padding + 10;
+    const contentWidth = width * 0.48;
+    const secondaryWidth = width * 0.42;
+    const rightX = width - secondaryWidth - padding;
 
-      const textStart = contentTop + placeholderHeight + 28;
-      const bulletHeight = drawBulletList(ctx, summarySegments, placeholderX + 8, textStart, innerWidth - 16, 40, themeStyle.bulletColor);
-      if (slide.pdfExcerpt) {
-        const excerptHeight = Math.min(cardHeight * 0.26, 220);
-        const excerptY = textStart + (bulletHeight ? bulletHeight + 16 : 0);
-        drawPdfExcerpt(ctx, slide.pdfExcerpt, slide.pdfPage, placeholderX, excerptY, innerWidth, excerptHeight, themeStyle);
-      }
+    // Title at Top Left
+    ctx.save();
+    const titleAlpha = Math.min(0.3 + progress * 3, 1);
+    ctx.globalAlpha = titleAlpha;
+    ctx.fillStyle = themeStyle.headingLabel;
+    ctx.font = '600 20px "Segoe UI", system-ui, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText('TOPIC OVERVIEW', leftMargin, padding);
+
+    ctx.fillStyle = '#ffffff';
+    const heading = slide.heading || 'Subject Matter';
+    const titleFontSize = heading.length > 30 ? 44 : 56;
+    ctx.font = `800 ${titleFontSize}px "Inter", "Segoe UI", sans-serif`;
+    const titleY = padding + 70;
+    const headingLines = wrapText(ctx, heading, leftMargin, titleY, contentWidth, titleFontSize * 1.2);
+    ctx.restore();
+
+    // Space reserved for heading only to keep video clean
+    ctx.restore();
+
+    // Secondary Content (Right Column)
+    const secondaryY = padding + 20;
+
+    if (snapshotImage) {
+      drawPdfSnapshot(ctx, snapshotImage, slide.pdfPage, rightX, secondaryY, secondaryWidth, height * 0.55, themeStyle);
+    } else if (slide.codeSnippet) {
+      drawCodeSnippet(ctx, slide.codeSnippet, slide.snippetLanguage, rightX, secondaryY, secondaryWidth, height * 0.7, themeStyle);
+    }
+
+    // Sidebar tags / keywords
+    if (slide.keywords && slide.keywords.length > 0) {
+      const keywordsY = snapshotImage ? secondaryY + height * 0.58 : (slide.codeSnippet ? secondaryY + height * 0.73 : secondaryY + 20);
+      drawKeywordChips(ctx, slide.keywords, rightX, keywordsY, secondaryWidth);
+      drawSidebarRibbons(ctx, slide.keywords, width, height);
+    }
+
+    // Caption Overlay (Bottom Centered) - Optional
+    const captionText = (slide.description || '').trim();
+    if (captionText && showCaption) {
+      ctx.save();
+      const capFontSize = 32;
+      ctx.font = `600 ${capFontSize}px "Inter", "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center';
+
+      const maxWidth = width * 0.8;
+      const metrics = ctx.measureText(captionText);
+      const textWidth = Math.min(metrics.width, maxWidth);
+      const bgWidth = textWidth + 60;
+      const bgHeight = 60;
+      const bgX = (width - bgWidth) / 2;
+      const bgY = height - 120;
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      drawRoundedRect(ctx, bgX, bgY, bgWidth, bgHeight, 15);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(captionText, width / 2, bgY + bgHeight / 2 + 10);
+      ctx.restore();
     }
   }
 
-  if (slide.codeSnippet) {
-    const snippetX = cardX + innerPadding;
-    const snippetY = cardY + cardHeight - innerPadding - 220;
-    const snippetHeightAvailable = Math.max(cardY + cardHeight - snippetY - innerPadding, 120);
-    drawCodeSnippet(
-      ctx,
-      slide.codeSnippet,
-      slide.snippetLanguage,
-      snippetX,
-      snippetY,
-      innerWidth,
-      snippetHeightAvailable,
-      themeStyle
-    );
-  }
-
-  if (!primaryImage) {
-    drawTechAccent(ctx, width, height);
-  }
-
-  const progressWidth = width - cardX * 2;
-  const progressX = cardX;
-  const progressY = cardY + cardHeight + 28;
-  const completion = (slideIndex + Math.min(Math.max(progress, 0), 1)) / totalSlides;
-
-  ctx.save();
-  ctx.fillStyle = themeStyle.progressTrack;
-  ctx.roundRect(progressX, progressY, progressWidth, 8, 999);
-  ctx.fill();
-
+  // Fine Progress Line 
+  const completedWidth = ((slideIndex + progress) / totalSlides) * width;
   ctx.fillStyle = themeStyle.progressFill;
-  ctx.roundRect(progressX, progressY, progressWidth * completion, 8, 999);
-  ctx.fill();
-  ctx.restore();
+  ctx.fillRect(0, height - 6, completedWidth, 6);
 }
 
-export async function exportLectureToWebM(draft: VideoDraft, opts?: { width?: number; height?: number; fps?: number; defaultSlideDurationMs?: number }): Promise<Blob> {
+export async function exportLectureToWebM(draft: VideoDraft, opts?: { width?: number; height?: number; fps?: number; defaultSlideDurationMs?: number; startOffset?: number }): Promise<Blob> {
   const width = opts?.width ?? 1280;
   const height = opts?.height ?? 720;
   const fps = opts?.fps ?? 30;
   const defaultDur = opts?.defaultSlideDurationMs ?? 2200;
+  const startOffset = opts?.startOffset || 0;
 
   const pdfDocument = await loadPdfDocumentFromDraft(draft);
   const pdfSnapshotCache = pdfDocument ? new Map<number, Promise<HTMLImageElement | null>>() : null;
@@ -887,64 +854,87 @@ export async function exportLectureToWebM(draft: VideoDraft, opts?: { width?: nu
     const resolvedPdfPage = pdfDocument
       ? (typeof slide.pdfPage === 'number' && slide.pdfPage >= 1
         ? slide.pdfPage
-        : (totalPdfPages ? ((slideIndex % totalPdfPages) + 1) : undefined))
+        : (totalPdfPages ? (((startOffset + slideIndex) % totalPdfPages) + 1) : undefined))
       : (typeof slide.pdfPage === 'number' && slide.pdfPage >= 1 ? slide.pdfPage : undefined);
+
     const slideForRender = (resolvedPdfPage && resolvedPdfPage !== slide.pdfPage)
       ? { ...slide, pdfPage: resolvedPdfPage }
       : slide;
+
     let backgroundImage: HTMLImageElement | null = null;
     if (slide.imageUrl) {
-      try { backgroundImage = await loadImage(slide.imageUrl); } catch {}
-    }
-    let snapshotImage: HTMLImageElement | null = null;
-    if (pdfDocument && resolvedPdfPage) {
-      try {
-        snapshotImage = await getPdfSnapshotImage(pdfDocument, resolvedPdfPage, pdfSnapshotCache!);
-      } catch {
-        snapshotImage = null;
-      }
+      try { backgroundImage = await loadImage(slide.imageUrl); } catch { }
     }
 
-    drawSlide(ctx, slideForRender, backgroundImage, snapshotImage, width, height, slideIndex, draft.slides.length, 0);
-
-    let durationMs = defaultDur;
+    // Prepare audio and duration
+    let audio: HTMLAudioElement | null = null;
+    let audioDurationMs = defaultDur;
 
     if (slide.audioUrl) {
       try {
-        const audio = new Audio(slide.audioUrl);
+        audio = new Audio(slide.audioUrl);
         audio.crossOrigin = 'anonymous';
         const source = audioCtx.createMediaElementSource(audio);
         source.connect(dest);
-        await audio.play();
+
+        // Resume context in case browser policy blocked it
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+        // Wait for metadata to get real duration if possible
         await new Promise<void>((resolve) => {
-          audio.onended = () => resolve();
-          audio.onerror = () => resolve();
+          audio!.onloadedmetadata = () => {
+            audioDurationMs = (audio!.duration * 1000) || defaultDur;
+            resolve();
+          };
+          audio!.onerror = () => resolve();
+          setTimeout(resolve, 1500); // Fail-safe
         });
-        const playbackMs = Math.floor(audio.currentTime * 1000) || Math.floor(audio.duration * 1000) || defaultDur;
-        durationMs = Math.max(defaultDur, playbackMs + 280);
-      } catch {
-        durationMs = defaultDur;
+      } catch (err) {
+        console.warn('Audio setup failed for slide', slideIndex, err);
       }
     }
 
-    const frames = Math.max(1, Math.ceil(durationMs / (1000 / fps)));
+    const totalDurationMs = Math.max(defaultDur, audioDurationMs + 300);
+    const frames = Math.max(1, Math.ceil(totalDurationMs / (1000 / fps)));
+
+    // Start playing
+    if (audio) {
+      audio.play().catch(e => console.warn('Audio play error:', e));
+    }
+
+    // Drawing loop synchronized with duration
+    const frameInterval = 1000 / fps;
     for (let i = 0; i < frames; i++) {
-      await sleep(1000 / fps);
-      // keep frame stream alive; redraw static frame
-      const progress = frames > 1 ? i / (frames - 1) : 1;
-      drawSlide(ctx, slideForRender, backgroundImage, snapshotImage, width, height, slideIndex, draft.slides.length, progress);
+      const startTime = Date.now();
+      const progress = i / (frames - 1 || 1);
+
+      // PDF Snapshot if available
+      let snapshotImg: HTMLImageElement | null = null;
+      if (pdfDocument && resolvedPdfPage) {
+        snapshotImg = await getPdfSnapshotImage(pdfDocument, resolvedPdfPage, pdfSnapshotCache!);
+      }
+
+      drawSlide(ctx, slideForRender, backgroundImage, snapshotImg, width, height, slideIndex, draft.slides.length, progress);
+
+      const elapsed = Date.now() - startTime;
+      await sleep(Math.max(1, frameInterval - elapsed));
+    }
+
+    if (audio) {
+      audio.pause();
+      audio.src = ''; // help GC
     }
   }
 
-  try { pdfDocument?.destroy(); } catch {}
+  try { pdfDocument?.destroy(); } catch { }
 
-  await sleep(250);
+  await sleep(400); // Final buffer
   recorder.stop();
 
   const blob: Blob = await new Promise((resolve) => {
     recorder.onstop = () => resolve(new Blob(chunks, { type: mime }));
   });
 
-  try { audioCtx.close(); } catch {}
+  try { audioCtx.close(); } catch { }
   return blob;
 }

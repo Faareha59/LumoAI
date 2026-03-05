@@ -1,0 +1,22 @@
+Available DBs: Lumo_AI, admin, config, local, project
+
+DB: Lumo_AI
+  - materials: 5 docs
+  - embeddings: 2 docs
+  - materials.files: 109 docs
+  - users: 18 docs
+  - sessions: 249 docs
+  - notes: 0 docs
+  - enrollments: 4 docs
+  - quiz_attempts: 7 docs
+  - courses: 2 docs
+  - lectures: 3 docs
+  - materials.chunks: 212 docs
+  - marketplace_jobs: 1 docs
+  - Project: 0 docs
+  - saved_exercises: 4 docs
+
+DB: project
+  - projects: 2 docs
+    - ID: 697ce97ed4d5d9148e664f12, Title: n 
+    - ID: 69a5c2e49c944361c91e9f01, Title: NoteTaking Website

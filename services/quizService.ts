@@ -18,7 +18,49 @@ export async function generateQuiz(courseId: string, moduleId: string): Promise<
   return { id: data.quiz.id, questions: data.quiz.questions };
 }
 
-export async function submitQuiz(params: { courseId: string; moduleId: string; quizId: string; questions: Array<{ question: string; options: string[]; correctAnswer: string }>; answers: Array<number|string>; }): Promise<{ score: number; total: number }> {
+export async function generatePdfQuiz(
+  courseId: string,
+  moduleId: string,
+  topic: string,
+  materialId?: string,
+  questionCount: number = 10
+): Promise<{
+  id: string;
+  questions: Array<{
+    type: 'mcq' | 'short' | 'programming';
+    question: string;
+    options?: string[];
+    correctAnswer: string;
+    explanation: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    points: number;
+  }>;
+  totalPoints: number;
+}> {
+  const res = await fetch(`${API_BASE}/api/quizzes/generate-from-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...auth() },
+    body: JSON.stringify({ courseId, moduleId, topic, materialId, questionCount }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'Failed to generate PDF quiz');
+  return data.quiz;
+}
+
+export async function submitQuiz(params: { courseId: string; moduleId: string; quizId: string; questions: Array<any>; answers: Array<number | string | null>; }): Promise<{
+  score: number;
+  total: number;
+  maxScore?: number;
+  percentage?: number;
+  results?: Array<{
+    questionIndex: number;
+    isCorrect: boolean;
+    earnedPoints: number;
+    maxPoints: number;
+    feedback: string;
+    explanation: string;
+  }>;
+}> {
   const res = await fetch(`${API_BASE}/api/quizzes/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...auth() },
@@ -26,7 +68,7 @@ export async function submitQuiz(params: { courseId: string; moduleId: string; q
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || 'Failed to submit quiz');
-  return data.result as { score: number; total: number };
+  return data.result;
 }
 
 export async function getAttemptsSummary(): Promise<Record<string, number>> {

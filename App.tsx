@@ -6,9 +6,11 @@ import Dashboard from './components/Dashboard';
 import LectureViewer from './components/student/LectureViewer';
 import Chatbot from './components/student/Chatbot';
 import StudyTools from './components/student/StudyTools';
-import CodingGame from './components/student/CodingGame';
+import LumoGames from './components/student/LumoGames';
 import VideoGenerator from './components/teacher/VideoGenerator';
-import PdfExplainer from './components/student/PdfExplainer';
+import LumoMeeting from './components/student/LumoMeeting';
+import Marketplace from './components/student/Marketplace';
+import MyExercises from './components/student/MyExercises';
 import AdminConsole from './components/admin/AdminConsole';
 import type { User, AppView, VideoDraft, Course, CourseModule } from './types';
 import { LumoLogo } from './components/Icons';
@@ -20,7 +22,7 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<AppView>('student_dashboard');
     const [courses, setCourses] = useState<Course[]>([]);
     const [selectedLecture, setSelectedLecture] = useState<VideoDraft | null>(null);
-    const [generationContext, setGenerationContext] = useState<{course: Course, module: CourseModule, topic?: string} | null>(null);
+    const [generationContext, setGenerationContext] = useState<{ course: Course, module: CourseModule, topic?: string } | null>(null);
     const [showSplash, setShowSplash] = useState(true);
     const [showAdminConsole, setShowAdminConsole] = useState(false);
     const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
@@ -31,7 +33,7 @@ const App: React.FC = () => {
         try { const s = localStorage.getItem(enrollKey(uid)); return s ? JSON.parse(s) : []; } catch { return []; }
     };
     const saveEnrollments = (uid: string, ids: string[]) => {
-        try { localStorage.setItem(enrollKey(uid), JSON.stringify(ids)); } catch {}
+        try { localStorage.setItem(enrollKey(uid), JSON.stringify(ids)); } catch { }
     };
 
     useEffect(() => {
@@ -99,27 +101,27 @@ const App: React.FC = () => {
 
     const handleLogout = () => {
         setUser(null);
-        setCourses([]); 
+        setCourses([]);
     };
 
     const handleSelectLecture = (lecture: VideoDraft) => {
         setSelectedLecture(lecture);
         setCurrentView('lecture_viewer');
     };
-    
-    const handleCreateCourse = async (subject: string, modules: CourseModule[]) => {
+
+    const handleCreateCourse = async (subject: string, modules: CourseModule[]): Promise<Course | null> => {
         try {
             const created = await apiCreateCourse(subject, modules);
-            // Refresh courses from server to keep in sync
             const data = await fetchCourses();
             setCourses(data.courses || [created]);
+            return created;
         } catch (e) {
-            // Fallback: optimistic local add
             const newCourse: Course = { id: `course-${Date.now()}`, title: subject, modules };
             setCourses(prev => [newCourse, ...prev]);
+            return newCourse;
         }
     };
-    
+
     const handleGenerateLectureClick = (course: Course, module: CourseModule, topic?: string) => {
         setGenerationContext({ course, module, topic });
         setCurrentView('video_generator');
@@ -158,8 +160,8 @@ const App: React.FC = () => {
         } catch {
             setCourses(prevCourses => prevCourses.map(course => (
                 course.id === courseId
-                ? { ...course, modules: course.modules.map(m => m.id === moduleId ? { ...m, lectures: m.lectures.filter(l => l.id !== lectureId) } : m) }
-                : course
+                    ? { ...course, modules: course.modules.map(m => m.id === moduleId ? { ...m, lectures: m.lectures.filter(l => l.id !== lectureId) } : m) }
+                    : course
             )));
         }
     };
@@ -182,9 +184,9 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUpdateModuleTopics = async (courseId: string, moduleId: string, topics: string[]) => {
+    const handleUpdateModuleTopics = async (courseId: string, moduleId: string, topics: string[], topicOutlines?: Record<string, string>) => {
         try {
-            await apiUpdateModuleTopics(courseId, moduleId, topics);
+            await apiUpdateModuleTopics(courseId, moduleId, topics, topicOutlines);
             const data = await fetchCourses();
             setCourses(data.courses || []);
         } catch {
@@ -193,7 +195,7 @@ const App: React.FC = () => {
                 if (c.id !== courseId) return c;
                 return {
                     ...c,
-                    modules: c.modules.map(m => m.id === moduleId ? { ...m, topics } : m)
+                    modules: c.modules.map(m => m.id === moduleId ? { ...m, topics, topicOutlines: topicOutlines || m.topicOutlines } : m)
                 };
             }));
         }
@@ -208,7 +210,7 @@ const App: React.FC = () => {
             setCurrentView('student_dashboard');
         }
     };
-    
+
     const renderView = () => {
         if (!user) return null;
 
@@ -219,49 +221,57 @@ const App: React.FC = () => {
             handleBackToDashboard();
             return null;
         }
-        
-        switch(currentView) {
+
+        switch (currentView) {
             case 'student_dashboard':
             case 'student_courses':
             case 'student_videos':
             case 'teacher_dashboard':
             case 'teacher_course_mgmt':
-                return <Dashboard 
-                            user={user} 
-                            courses={courses} 
-                            currentView={currentView}
-                            onSelectLecture={handleSelectLecture} 
-                            onCreateCourse={handleCreateCourse}
-                            onGenerateLectureClick={handleGenerateLectureClick}
-                            onDeleteLecture={handleDeleteLecture}
-                            enrolledCourseIds={enrolledCourseIds}
-                            onEnrollCourse={handleEnrollCourse}
-                            onWithdrawCourse={handleWithdrawCourse}
-                            onUpdateModuleTopics={handleUpdateModuleTopics}
-                            onRefreshCourses={refreshCourses}
-                        />;
+                return <Dashboard
+                    user={user}
+                    courses={courses}
+                    currentView={currentView}
+                    onSelectLecture={handleSelectLecture}
+                    onCreateCourse={handleCreateCourse}
+                    onGenerateLectureClick={handleGenerateLectureClick}
+                    onDeleteLecture={handleDeleteLecture}
+                    enrolledCourseIds={enrolledCourseIds}
+                    onEnrollCourse={handleEnrollCourse}
+                    onWithdrawCourse={handleWithdrawCourse}
+                    onUpdateModuleTopics={handleUpdateModuleTopics}
+                    onRefreshCourses={refreshCourses}
+                />;
             case 'chatbot':
                 return <Chatbot userName={user.name} />;
             case 'study_tools':
                 return <StudyTools courses={courses} enrolledCourseIds={enrolledCourseIds} />;
             case 'coding_game':
-                return <CodingGame />;
-            case 'pdf_explainer':
-                return <PdfExplainer />;
+                return <LumoGames
+                    courses={courses}
+                    enrolledCourseIds={enrolledCourseIds}
+                    onExit={() => setCurrentView('student_dashboard')}
+                />;
+            case 'lumo_meeting':
+                return <LumoMeeting />;
+            case 'marketplace':
+                return <Marketplace user={user} />;
+            case 'my_exercises':
+                return <MyExercises courses={courses} />;
             case 'video_generator':
                 if (generationContext) {
-                    return <VideoGenerator 
-                                course={generationContext.course}
-                                module={generationContext.module}
-                                topic={generationContext.topic}
-                                onPublish={handlePublishVideo} 
-                                onCancel={handleBackToDashboard}
-                           />;
+                    return <VideoGenerator
+                        course={generationContext.course}
+                        module={generationContext.module}
+                        topic={generationContext.topic}
+                        onPublish={handlePublishVideo}
+                        onCancel={handleBackToDashboard}
+                    />;
                 }
-                 handleBackToDashboard(); 
-                 return null;
+                handleBackToDashboard();
+                return null;
             default:
-               
+
                 handleBackToDashboard();
                 return null;
         }

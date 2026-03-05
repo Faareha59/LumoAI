@@ -14,7 +14,7 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
   const DEFAULT_DURATIONS = { focus: 25 * 60, short: 5 * 60, long: 15 * 60 } as const;
   const savedInit = (() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch { return null; }
-  })() as { phase?: Phase; endAt?: number|null } | null;
+  })() as { phase?: Phase; endAt?: number | null } | null;
 
   const initPhase: Phase = savedInit?.phase ?? 'focus';
   const initEndAt: number | null = savedInit?.endAt && savedInit.endAt > Date.now() ? savedInit.endAt : null;
@@ -26,12 +26,8 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
   const [completedFocus, setCompletedFocus] = useState(0);
   const [sound, setSound] = useState(true);
   const [blink, setBlink] = useState(true);
-  const [technique, setTechnique] = useState<'pomodoro'|'feynman'>('pomodoro');
 
   const durations = useMemo(() => ({ focus: 25 * 60, short: 5 * 60, long: 15 * 60 }), []);
-  const myCourses = useMemo(() => (courses || []).filter(c => (enrolledCourseIds || []).includes(c.id)), [courses, enrolledCourseIds]);
-  const [selCourseId, setSelCourseId] = useState<string>(myCourses[0]?.id || '');
-  const [notes, setNotes] = useState<string>('');
 
   const targetFor = useCallback((p: Phase) => Date.now() + (durations[p] * 1000), [durations]);
 
@@ -59,7 +55,7 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
         setEndAt(null);
         setRemaining(durations[saved.phase ?? 'focus']);
       }
-    } catch {}
+    } catch { }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -91,13 +87,13 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, endAt, running, timeSaved: Date.now() }));
-    } catch {}
+    } catch { }
   }, [phase, endAt, running]);
 
   // Also persist remaining occasionally for extra robustness
   useEffect(() => {
     const id = setInterval(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, endAt, running, timeSaved: Date.now() })); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, endAt, running, timeSaved: Date.now() })); } catch { }
     }, 2000);
     return () => clearInterval(id);
   }, [phase, endAt, running]);
@@ -105,7 +101,7 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
   // Persist on unmount as a safety
   useEffect(() => {
     return () => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, endAt, running, timeSaved: Date.now() })); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ phase, endAt, running, timeSaved: Date.now() })); } catch { }
     };
   }, [phase, endAt, running]);
 
@@ -127,7 +123,7 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
               setRemaining(Math.max(0, Math.floor((saved.endAt - Date.now()) / 1000)));
             }
           }
-        } catch {}
+        } catch { }
       }
     };
     document.addEventListener('visibilitychange', syncFromEnd);
@@ -149,7 +145,7 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
         g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
         o.start(); o.stop(ctx.currentTime + 0.45);
-      } catch {}
+      } catch { }
     }
     if (phase === 'focus') {
       setCompletedFocus(c => c + 1);
@@ -216,12 +212,6 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
   return (
     <div className="w-full p-4 md:p-6">
       <div className="mx-auto max-w-4xl">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <button onClick={() => setTechnique('pomodoro')} className={`px-4 h-10 rounded-full border text-sm transition ${technique==='pomodoro' ? 'bg-foreground text-background' : 'bg-background hover:border-foreground/40'}`}>Pomodoro Timer</button>
-          <button onClick={() => setTechnique('feynman')} className={`px-4 h-10 rounded-full border text-sm transition ${technique==='feynman' ? 'bg-foreground text-background' : 'bg-background hover:border-foreground/40'}`}>Feynman Technique</button>
-        </div>
-
-        {technique === 'pomodoro' ? (
         <div className="flex flex-col items-center">
           <div className="flex items-center gap-3 mb-4">
             <div className="text-xs px-2 py-1 rounded-full bg-background text-foreground/80 border border-border">{phaseLabel}</div>
@@ -245,9 +235,9 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
 
           <div className="flex flex-col gap-4 w-full max-w-lg mt-6">
             <div className="grid grid-cols-3 gap-2">
-              <button className={`h-10 rounded border text-sm ${phase==='focus'?'bg-foreground text-background':'bg-background border-border'}`} onClick={() => setPhaseAndReset('focus')}>Focus</button>
-              <button className={`h-10 rounded border text-sm ${phase==='short'?'bg-foreground text-background':'bg-background border-border'}`} onClick={() => setPhaseAndReset('short')}>Short</button>
-              <button className={`h-10 rounded border text-sm ${phase==='long'?'bg-foreground text-background':'bg-background border-border'}`} onClick={() => setPhaseAndReset('long')}>Long</button>
+              <button className={`h-10 rounded border text-sm ${phase === 'focus' ? 'bg-foreground text-background' : 'bg-background border-border'}`} onClick={() => setPhaseAndReset('focus')}>Focus</button>
+              <button className={`h-10 rounded border text-sm ${phase === 'short' ? 'bg-foreground text-background' : 'bg-background border-border'}`} onClick={() => setPhaseAndReset('short')}>Short</button>
+              <button className={`h-10 rounded border text-sm ${phase === 'long' ? 'bg-foreground text-background' : 'bg-background border-border'}`} onClick={() => setPhaseAndReset('long')}>Long</button>
             </div>
 
             <div className="flex gap-2">
@@ -265,30 +255,6 @@ const PomodoroTimer: React.FC<Props> = ({ courses = [], enrolledCourseIds = [] }
             • Improves focus • Prevents burnout • Builds consistency
           </div>
         </div>
-        ) : (
-        <div className="grid grid-cols-1 gap-4">
-          <div className="rounded-lg border border-border bg-background p-6">
-            {myCourses.length ? (
-              <>
-                <label className="block text-sm mb-1">Select Course</label>
-                <select className="w-full p-2 mb-3 bg-background border border-border rounded-md" value={selCourseId} onChange={(e) => setSelCourseId(e.target.value)}>
-                  {myCourses.map(c => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </select>
-                <textarea
-                  className="w-full h-64 p-3 bg-white text-black rounded-md border border-border"
-                  placeholder="Explain the concept in simple words, as if teaching someone else..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Enroll in a course to use the Feynman technique here.</p>
-            )}
-          </div>
-        </div>
-        )}
       </div>
       <style>{`
         /* Responsive flip tiles using CSS vars so they fit without zoom */

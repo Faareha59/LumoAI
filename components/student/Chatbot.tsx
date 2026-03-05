@@ -12,9 +12,9 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [tab, setTab] = useState<'ai'|'class'>('ai');
+    const [tab, setTab] = useState<'ai' | 'class'>('ai');
     const [recording, setRecording] = useState(false);
-    const [classMsgs, setClassMsgs] = useState<Array<{text:string; sender:string; mentions:string[]; time:number}>>([]);
+    const [classMsgs, setClassMsgs] = useState<Array<{ text: string; sender: string; mentions: string[]; time: number }>>([]);
     const wsRef = useRef<WebSocket | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -45,9 +45,9 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                 try {
                     const msg = JSON.parse(ev.data);
                     if (msg?.type === 'class_message') {
-                        setClassMsgs(prev => [...prev, { text: msg.text, sender: msg.sender, mentions: msg.mentions||[], time: msg.time||Date.now() }]);
+                        setClassMsgs(prev => [...prev, { text: msg.text, sender: msg.sender, mentions: msg.mentions || [], time: msg.time || Date.now() }]);
                     }
-                } catch {}
+                } catch { }
             };
 
             ws.onerror = () => {
@@ -59,7 +59,7 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
             };
         };
         tryConnect(0);
-        return () => { closed = true; try { current?.close(); } catch {} };
+        return () => { closed = true; try { current?.close(); } catch { } };
     }, [tab]);
 
     useEffect(() => {
@@ -117,7 +117,7 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
         flush();
         return <>{nodes}</>;
     };
-    
+
     // Voice input via Web Speech API (fallback no-op if unavailable)
     const startVoice = () => {
         const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
@@ -171,15 +171,15 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                 <h1 className="text-3xl font-bold">AI Study Assistant · Live Q&A Chatbot</h1>
             </div>
             <div className="flex items-center gap-2 mb-3">
-                <button onClick={() => setTab('ai')} className={`px-3 h-9 rounded-full border text-sm ${tab==='ai'?'bg-foreground text-background':'bg-background'}`}>Ask AI</button>
-                <button onClick={() => setTab('class')} className={`px-3 h-9 rounded-full border text-sm ${tab==='class'?'bg-foreground text-background':'bg-background'}`}>Class Chat</button>
+                <button onClick={() => setTab('ai')} className={`px-3 h-9 rounded-full border text-sm ${tab === 'ai' ? 'bg-foreground text-background' : 'bg-background'}`}>Ask AI</button>
+                <button onClick={() => setTab('class')} className={`px-3 h-9 rounded-full border text-sm ${tab === 'class' ? 'bg-foreground text-background' : 'bg-background'}`}>Class Chat</button>
                 <div className="ml-auto flex items-center gap-2">
                     <Button onClick={downloadPdf} variant="secondary">Download chat</Button>
                 </div>
             </div>
             <div className="flex-1 flex flex-col bg-card border border-border rounded-lg overflow-hidden">
                 <div className="flex-1 p-6 space-y-4 overflow-y-auto">
-                    {tab==='ai' ? messages.map((msg, index) => (
+                    {tab === 'ai' ? messages.map((msg, index) => (
                         <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                             {msg.sender === 'bot' && (
                                 <div className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center flex-shrink-0">
@@ -192,25 +192,25 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                         </div>
                     )) : (
                         <div className="space-y-3">
-                            {classMsgs.map((m,i)=>{
+                            {classMsgs.map((m, i) => {
                                 const me = (userName || 'Student');
-                                const mentioned = (m.mentions||[]).some(x => x.toLowerCase()===me.toLowerCase());
+                                const mentioned = (m.mentions || []).some(x => x.toLowerCase() === me.toLowerCase());
                                 return (
-                                    <div key={i} className={`flex items-start gap-3 ${m.sender===me?'justify-end':'justify-start'}`}>
-                                        <div className={`max-w-lg px-4 py-2 rounded-lg ${m.sender===me?'bg-foreground text-background':'bg-background'} ${mentioned && m.sender!==me ? 'ring-2 ring-amber-400' : ''}`}>
+                                    <div key={i} className={`flex items-start gap-3 ${m.sender === me ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-lg px-4 py-2 rounded-lg ${m.sender === me ? 'bg-foreground text-background' : 'bg-background'} ${mentioned && m.sender !== me ? 'ring-2 ring-black' : ''}`}>
                                             <p className="text-xs font-medium mb-1">{m.sender}</p>
                                             <div className="text-sm break-words">{renderMessage(m.text)}</div>
                                         </div>
                                     </div>
                                 );
                             })}
-                            {classMsgs.length===0 && <div className="text-sm text-muted-foreground">No messages yet. Start the conversation!</div>}
+                            {classMsgs.length === 0 && <div className="text-sm text-muted-foreground">No messages yet. Start the conversation!</div>}
                         </div>
                     )}
                     {isLoading && (
                         <div className="flex items-start gap-3 justify-start">
-                             <div className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center flex-shrink-0"><LumoLogo className="w-4 h-4 text-foreground/70"/></div>
-                             <div className="max-w-lg px-4 py-2 rounded-lg bg-background">
+                            <div className="w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center flex-shrink-0"><LumoLogo className="w-4 h-4 text-foreground/70" /></div>
+                            <div className="max-w-lg px-4 py-2 rounded-lg bg-background">
                                 <div className="flex items-center gap-2">
                                     <span className="w-2 h-2 bg-muted rounded-full animate-pulse delay-75"></span>
                                     <span className="w-2 h-2 bg-muted rounded-full animate-pulse delay-150"></span>
@@ -219,7 +219,7 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                             </div>
                         </div>
                     )}
-                     <div ref={messagesEndRef} />
+                    <div ref={messagesEndRef} />
                 </div>
                 <div className="border-t border-border p-4 bg-background">
                     <div className="flex items-center gap-4">
@@ -229,10 +229,10 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !isLoading) {
-                                    if (tab==='ai') { handleSend(); }
+                                    if (tab === 'ai') { handleSend(); }
                                     else {
                                         const ws = wsRef.current;
-                                        if (ws && ws.readyState===1 && input.trim()) {
+                                        if (ws && ws.readyState === 1 && input.trim()) {
                                             const me = (userName || 'Student');
                                             ws.send(JSON.stringify({ text: input.trim(), sender: me }));
                                             setInput('');
@@ -244,15 +244,15 @@ const Chatbot: React.FC<{ userName?: string }> = ({ userName }) => {
                             className="w-full p-2 bg-card border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-foreground"
                             disabled={isLoading}
                         />
-                        <button onClick={startVoice} aria-label="Start voice input" title="Voice input" className={`w-9 h-9 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground flex items-center justify-center ${recording? 'animate-pulse':''}`}>
+                        <button onClick={startVoice} aria-label="Start voice input" title="Voice input" className={`w-9 h-9 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground flex items-center justify-center ${recording ? 'animate-pulse' : ''}`}>
                             <MicrophoneIcon className="w-4 h-4" />
                         </button>
-                        {tab==='ai' ? (
+                        {tab === 'ai' ? (
                             <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
                                 <SendIcon className="w-5 h-5" />
                             </Button>
                         ) : (
-                            <Button onClick={() => { const ws = wsRef.current; const me = (userName || 'Student'); if (ws && ws.readyState===1 && input.trim()) { ws.send(JSON.stringify({ text: input.trim(), sender: me })); setInput(''); } }} disabled={!input.trim()}>
+                            <Button onClick={() => { const ws = wsRef.current; const me = (userName || 'Student'); if (ws && ws.readyState === 1 && input.trim()) { ws.send(JSON.stringify({ text: input.trim(), sender: me })); setInput(''); } }} disabled={!input.trim()}>
                                 <SendIcon className="w-5 h-5" />
                             </Button>
                         )}

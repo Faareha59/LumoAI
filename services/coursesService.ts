@@ -47,11 +47,11 @@ export async function deleteLecture(courseId: string, moduleId: string, lectureI
   if (!res.ok) throw new Error(data?.error || 'Failed to delete lecture');
 }
 
-export async function updateModuleTopics(courseId: string, moduleId: string, topics: string[]): Promise<void> {
+export async function updateModuleTopics(courseId: string, moduleId: string, topics: string[], topicOutlines?: Record<string, string>): Promise<void> {
   const res = await fetch(`${BASE}/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}/topics`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ topics }),
+    body: JSON.stringify({ topics, topicOutlines }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || 'Failed to update topics');

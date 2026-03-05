@@ -11,16 +11,19 @@ export interface User {
 }
 
 export type AppView =
-  | 'student_dashboard'
-  | 'student_courses'
-  | 'student_videos'
-  | 'lecture_viewer'
-  | 'chatbot'
-  | 'study_tools'
-  | 'coding_game'
-  | 'teacher_dashboard'
-  | 'video_generator'
-  | 'pdf_explainer';
+    | 'student_dashboard'
+    | 'student_courses'
+    | 'student_videos'
+    | 'lecture_viewer'
+    | 'chatbot'
+    | 'study_tools'
+    | 'coding_game'
+    | 'teacher_dashboard'
+    | 'video_generator'
+    | 'pdf_explainer'
+    | 'lumo_meeting'
+    | 'marketplace'
+    | 'my_exercises';
 
 export interface QuizQuestion {
     question: string;
@@ -32,12 +35,13 @@ export interface QuizQuestion {
 export interface ModuleOutline {
     title: string;
     description: string;
+    topics?: string[];
 }
 
 // Represents a slide within a lecture.
 export interface Slide {
-    description: string; 
-    imagePrompt: string; 
+    description: string;
+    imagePrompt: string;
     imageUrl?: string;
     audioUrl?: string;
     heading?: string;
@@ -52,12 +56,13 @@ export interface Slide {
 
 // Represents a single video lecture.
 export interface VideoDraft {
-    id:string;
+    id: string;
     title: string;
     summary: string;
     slides: Slide[];
     quiz: QuizQuestion[];
     pdfDocumentBase64?: string;
+    pdfId?: string; // GridFS ID for uploaded PDF
 }
 
 // A module within a course, which contains lectures.
@@ -67,6 +72,8 @@ export interface CourseModule {
     description: string;
     lectures: VideoDraft[];
     topics?: string[];
+    topicOutlines?: Record<string, string>; // Mapping of topic title to its detailed outline
+    materialIds?: Record<string, string>; // Mapping of topic/lecture title to GridFS ID
 }
 
 // The top-level structure for a subject.
@@ -91,4 +98,62 @@ export interface StudentQuestion {
     studentName: string;
     lectureTitle: string;
     question: string;
+}
+
+export interface MarketplaceJob {
+    _id: string;
+    title: string;
+    description: string;
+    budget: number;
+    currency: string;
+    creatorId: string;
+    creatorName: string;
+    freelancerId?: string;
+    freelancerName?: string;
+    status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'DISPUTED';
+    submissionText?: string;
+    aiVerdict?: {
+        approved: boolean;
+        score: number;
+        reason: string;
+    };
+    createdAt: string;
+}
+
+export interface Collaborator {
+    userId: string;
+    name: string;
+    role: 'owner' | 'member';
+}
+
+export interface ProjectFile {
+    name: string;
+    content: string;
+    lastUpdated?: string;
+}
+
+export interface Project {
+    _id: string;
+    title: string;
+    description?: string;
+    repoUrl?: string;
+    files?: ProjectFile[];
+    packages?: string[]; // e.g. ["numpy", "react-router-dom"]
+    terminalLogs?: string[];
+    ownerId: string;
+    ownerName: string;
+    collaborators: Collaborator[];
+    createdAt: string;
+    lastUpdated?: string;
+}
+
+export interface ProjectInvite {
+    _id: string;
+    projectId: string;
+    projectTitle: string;
+    senderId: string;
+    senderName: string;
+    receiverId: string;
+    status: 'pending' | 'accepted' | 'rejected';
+    createdAt: string;
 }

@@ -8,15 +8,18 @@
     "dev": "node index.js"
   },
   "dependencies": {
-    "@google/genai": "^1.28.0",
+    "@google/genai": "^1.38.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "google-tts-api": "^2.0.2",
+    "groq-sdk": "^0.37.0",
     "lumoai": "file:..",
     "mongodb": "^6.9.0",
     "multer": "^2.0.2",
+    "node-edge-tts": "^1.2.9",
     "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.17.2",
     "ws": "^8.18.3"
   }
 }
