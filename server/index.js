@@ -183,6 +183,8 @@ const generateSlidesFromAI = async (jobId, text, originalName, slideRange = '1-1
 
   // Parse slide range
   const [startSlide, endSlide] = slideRange.split('-').map(Number);
+  const requestedSlideCount = (endSlide - startSlide + 1) || 10;
+  const isFullBatch = endSlide >= 30;
 
   const rawPages = (text || '')
     .split(/\f+|Page \d+|\[Page \d+\]/i)
@@ -194,12 +196,7 @@ const generateSlidesFromAI = async (jobId, text, originalName, slideRange = '1-1
   // If text is empty but we have a buffer, we'll rely on Gemini Vision
   let truncated = '';
   if (text && text.trim().length > 0) {
-    // Focus content based on range
-    const requestedSlideCount = (endSlide - startSlide + 1) || 10;
-    // Improved mapping: If the user wants a large batch (e.g. 30 slides),
-    // we should ensure it spans the whole requested portion of the PDF.
-    // If endSlide is high (30+), we assume the user wants to reach the end of the doc.
-    const isFullBatch = endSlide >= 30;
+    // Improved mapping
 
     const startPageIndexFinal = pages.length > 10
       ? Math.floor(pages.length * Math.max(0, (startSlide - 1) / (isFullBatch ? Math.max(endSlide, 40) : 50)))
