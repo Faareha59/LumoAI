@@ -1,53 +1,61 @@
 import React, { useState, useEffect } from 'react';
-import { MarketplaceJob } from '../../types';
-import { SparklesIcon, SearchIcon, FilterIcon, ClockIcon, UserIcon, BoltIcon, StarIcon, SendIcon } from '../Icons';
+import { SkillSwap as SkillSwapType } from '../../types';
+import { SparklesIcon, SearchIcon, FilterIcon, ClockIcon, UserIcon, BoltIcon, StarIcon, SendIcon, VideoIcon, ChatIcon } from '../Icons';
 import { getToken } from '../../services/authService';
 
-const Marketplace: React.FC<{ user: any }> = ({ user }) => {
+const Marketplace: React.FC<{ 
+    user: any,
+    onStartMeeting?: (roomId: string) => void 
+}> = ({ user, onStartMeeting }) => {
     const [view, setView] = useState<'browse' | 'posted' | 'working'>('browse');
-    const [jobs, setJobs] = useState<MarketplaceJob[]>([]);
+    const [swaps, setSwaps] = useState<SkillSwapType[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Form state
-    const [newTitle, setNewTitle] = useState('');
+    const [newSeeking, setNewSeeking] = useState('');
+    const [newOffering, setNewOffering] = useState('');
     const [newDesc, setNewDesc] = useState('');
 
     const [submissionText, setSubmissionText] = useState('');
-    const [selectedJob, setSelectedJob] = useState<MarketplaceJob | null>(null);
+    const [selectedSwap, setSelectedSwap] = useState<SkillSwapType | null>(null);
     
     // Edit state
-    const [editingJobId, setEditingJobId] = useState<string | null>(null);
-    const [editTitle, setEditTitle] = useState('');
+    const [editingSwapId, setEditingSwapId] = useState<string | null>(null);
+    const [editSeeking, setEditSeeking] = useState('');
+    const [editOffering, setEditOffering] = useState('');
     const [editDesc, setEditDesc] = useState('');
 
+    // Collaboration state
+    const [msgText, setMsgText] = useState('');
+    const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
+
     useEffect(() => {
-        if (view === 'browse') fetchJobs();
-        if (view === 'posted' || view === 'working') fetchMyJobs();
+        if (view === 'browse') fetchSwaps();
+        if (view === 'posted' || view === 'working') fetchMySwaps();
     }, [view]);
 
-
-
-    const fetchJobs = async () => {
+    const fetchSwaps = async () => {
         try {
             const res = await fetch('/api/marketplace/jobs');
             const data = await res.json();
-            setJobs(data.jobs || []);
+            setSwaps(data.jobs || []);
         } catch (e) { console.error(e); }
     };
 
-    const fetchMyJobs = async () => {
+    const fetchMySwaps = async () => {
         try {
             const token = getToken();
             const res = await fetch('/api/marketplace/my-jobs', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
-            if (view === 'posted') setJobs(data.posted || []);
-            else setJobs(data.working || []);
+            if (view === 'posted') setSwaps(data.posted || []);
+            else setSwaps(data.working || []);
         } catch (e) { console.error(e); }
     };
 
-    const handlePostJob = async () => {
+    const handlePostSwap = async () => {
+        if (!newSeeking || !newOffering || !newDesc) return alert('Please fill all fields');
         try {
             const token = getToken();
             const res = await fetch('/api/marketplace/jobs', {
@@ -56,15 +64,20 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify({ title: newTitle, description: newDesc })
+                body: JSON.stringify({ 
+                    title: newSeeking, 
+                    offering: newOffering, 
+                    description: newDesc 
+                })
             });
             if (res.ok) {
-                alert('Job posted successfully!');
-                setNewTitle('');
+                alert('Skill Swap posted successfully!');
+                setNewSeeking('');
+                setNewOffering('');
                 setNewDesc('');
                 setView('posted');
             } else {
-                alert('Failed to post job');
+                alert('Failed to post swap');
             }
         } catch (e) { console.error(e); }
     };
@@ -77,11 +90,11 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
-                alert('Job accepted! Go to "My Works" to view it.');
-                fetchJobs();
+                alert('Swap Agreement Initiated! Go to "My Collaborations" to begin learning.');
+                fetchSwaps();
             } else {
                 const d = await res.json();
-                alert(d.error || 'Failed to accept');
+                alert(d.error || 'Failed to initiate swap');
             }
         } catch (e) { console.error(e); }
     };
@@ -100,13 +113,13 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
             const data = await res.json();
             if (data.success) {
                 if (data.verdict.approved) {
-                    alert(`Submission Approved by AI!\nScore: ${data.verdict.score}\nReason: ${data.verdict.reason}`);
+                    alert(`Skill Verification Approved by AI!\nScore: ${data.verdict.score}\nReason: ${data.verdict.reason}`);
                 } else {
-                    alert(`Submission REJECTED/FLAGGED by AI.\nScore: ${data.verdict.score}\nReason: ${data.verdict.reason}`);
+                    alert(`Skill Verification REJECTED/FLAGGED by AI.\nScore: ${data.verdict.score}\nReason: ${data.verdict.reason}`);
                 }
                 setSubmissionText('');
-                setSelectedJob(null);
-                fetchMyJobs();
+                setSelectedSwap(null);
+                fetchMySwaps();
             } else {
                 alert('Submission failed');
             }
@@ -122,7 +135,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
             });
             if (res.ok) {
                 alert('Collaboration cancelled successfully!');
-                fetchMyJobs();
+                fetchMySwaps();
             } else {
                 alert('Failed to cancel collaboration');
             }
@@ -138,15 +151,16 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
-                fetchMyJobs();
+                fetchMySwaps();
             }
         } catch (e) { console.error(e); }
     };
 
-    const startEditing = (job: MarketplaceJob) => {
-        setEditingJobId(job._id);
-        setEditTitle(job.title);
-        setEditDesc(job.description);
+    const startEditing = (swap: SkillSwapType) => {
+        setEditingSwapId(swap._id);
+        setEditSeeking(swap.title);
+        setEditOffering(swap.offering);
+        setEditDesc(swap.description);
     };
 
     const handleUpdate = async (id: string) => {
@@ -158,17 +172,96 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify({ title: editTitle, description: editDesc })
+                body: JSON.stringify({ 
+                    title: editSeeking, 
+                    offering: editOffering, 
+                    description: editDesc 
+                })
             });
             if (res.ok) {
-                setEditingJobId(null);
-                fetchMyJobs();
+                setEditingSwapId(null);
+                fetchMySwaps();
             }
         } catch (e) { console.error(e); }
     };
 
-    const filteredJobs = jobs.filter(j =>
-        j.title.toLowerCase().includes(searchQuery.toLowerCase()) || j.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const handleSendMessage = async (id: string) => {
+        if (!msgText.trim()) return;
+        const currentMsg = msgText;
+        setMsgText(''); // Clear early for better UX
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ text: currentMsg })
+            });
+            if (res.ok) {
+                fetchMySwaps();
+            } else {
+                setMsgText(currentMsg); // Restore on error
+                alert('Failed to send message');
+            }
+        } catch (e) { 
+            setMsgText(currentMsg);
+            console.error(e); 
+        }
+    };
+
+    const handleComplete = async (id: string) => {
+        if (!confirm('Are you sure you want to mark this Skill Swap as Complete? This will finalize the learning agreement.')) return;
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}/complete`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                alert('Agreement Marked as Complete! Well done.');
+                fetchMySwaps();
+            } else {
+                alert('Failed to complete swap');
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const handleUpdatePlan = async (id: string, plan: string) => {
+        setIsUpdatingPlan(true);
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}/plan`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ plan })
+            });
+            if (res.ok) {
+                // Optionally show success or just let re-fetch handle it
+                fetchMySwaps();
+            }
+        } catch (e) { console.error(e); }
+        finally { setIsUpdatingPlan(false); }
+    };
+
+    const startMeeting = (id: string) => {
+        const roomName = `LumoSwap-${id}`;
+        if (onStartMeeting) {
+            onStartMeeting(roomName);
+        } else {
+            // Fallback for standalone use
+            window.open(`https://meet.jit.si/${roomName}`, '_blank');
+        }
+    };
+
+    const filteredSwaps = swaps.filter(s =>
+        s.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        s.offering.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.description.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -181,7 +274,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                             <SearchIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-black transition-colors" />
                             <input
                                 type="text"
-                                placeholder="What specialized service do you need for your project?"
+                                placeholder="Search for skills to learn or trade..."
                                 className="w-full pl-14 pr-6 py-4 bg-gray-50/50 border-2 border-transparent rounded-[2rem] text-black placeholder:text-gray-400 focus:bg-white focus:border-black/30 focus:ring-4 focus:ring-black/5 transition-all font-semibold text-base shadow-inner"
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
@@ -195,17 +288,15 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                         </div>
                     </div>
                 </div>
-
-
             </header>
 
-            {/* Glassmorphism View Switcher */}
-            < div className="bg-slate-50/30 backdrop-blur-md border-b border-slate-200 px-8 py-1" >
+            {/* View Switcher */}
+            <div className="bg-slate-50/30 backdrop-blur-md border-b border-slate-200 px-8 py-1">
                 <div className="max-w-7xl mx-auto flex gap-10">
                     {[
-                        { id: 'browse', label: 'Explore Services', icon: SearchIcon },
-                        { id: 'working', label: 'My Collaborations', icon: BoltIcon },
-                        { id: 'posted', label: 'Contract Manager', icon: ClockIcon }
+                        { id: 'browse', label: 'Skill Swap Arena', icon: SearchIcon },
+                        { id: 'working', label: 'My Learning Agreements', icon: BoltIcon },
+                        { id: 'posted', label: 'My Trade Posts', icon: ClockIcon }
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -221,7 +312,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                         </button>
                     ))}
                 </div>
-            </div >
+            </div>
 
             <main className="flex-1 overflow-y-auto p-8 lg:p-12 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-fixed opacity-[0.98]">
                 <div className="max-w-7xl mx-auto">
@@ -230,60 +321,57 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                                 <div className="space-y-2">
                                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-black/5 text-black rounded-lg text-[9px] font-black uppercase tracking-wider mb-2 border border-black/10">
-                                        <SparklesIcon className="w-3 h-3" /> New Talent Available
+                                        <SparklesIcon className="w-3 h-3" /> Talent Trading Platform
                                     </div>
                                     <h2 className="text-5xl font-black text-black uppercase italic tracking-tighter leading-none">
-                                        Global <span className="text-gray-400 not-italic">Talent</span> Hub
+                                        Skill <span className="text-gray-400 not-italic">Swap</span> Arena
                                     </h2>
-                                    <p className="text-gray-500 font-semibold text-lg max-w-xl">Scale your project's potential with elite student contributors</p>
-                                </div>
-                                <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-                                    <span className="text-slate-400 font-black text-[9px] uppercase tracking-widest pl-2">Sort By</span>
-                                    <select className="bg-slate-50 border-none text-[10px] font-black uppercase tracking-widest text-slate-700 rounded-xl focus:ring-0 cursor-pointer">
-                                        <option>Recommended</option>
-                                        <option>Price: High to Low</option>
-                                        <option>Top Rated</option>
-                                    </select>
+                                    <p className="text-gray-500 font-semibold text-lg max-w-xl">Trade your unique talents with other students for mutual growth</p>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                                {filteredJobs.map(job => (
-                                    <div key={job._id} className="group bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_25px_60px_-20px_rgba(0,0,0,0.1)] transition-all duration-500 hover:-translate-y-2 flex flex-col">
+                                {filteredSwaps.map(swap => (
+                                    <div key={swap._id} className="group bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_25px_60px_-20px_rgba(0,0,0,0.1)] transition-all duration-500 hover:-translate-y-2 flex flex-col p-7">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <div className="w-10 h-10 rounded-2xl bg-gray-100 overflow-hidden border-2 border-white shadow-lg">
+                                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${swap.creatorName}`} alt="avatar" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-black text-black uppercase tracking-tighter line-clamp-1">{swap.creatorName}</span>
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest text-xs">Student Mentor</span>
+                                            </div>
+                                        </div>
 
-
-                                        <div className="p-7 flex flex-col flex-1">
-                                            <div className="flex items-center gap-3 mb-5">
-                                                <div className="relative">
-                                                    <div className="w-10 h-10 rounded-2xl bg-gray-100 overflow-hidden border-2 border-white shadow-lg">
-                                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${job.creatorName}`} alt="avatar" />
-                                                    </div>
-                                                    <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-black border-2 border-white rounded-full" />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-black uppercase tracking-tighter line-clamp-1">{job.creatorName}</span>
-                                                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Level 2 Contributor</span>
+                                        <div className="space-y-4 mb-6">
+                                            <div className="p-4 bg-green-50/50 border border-green-100 rounded-2xl">
+                                                <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">Offering/Teaching</p>
+                                                <p className="text-sm font-black text-black italic uppercase tracking-tight">{swap.offering}</p>
+                                            </div>
+                                            <div className="flex justify-center -my-2 relative z-10">
+                                                <div className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm">
+                                                    <BoltIcon className="w-4 h-4 text-black" />
                                                 </div>
                                             </div>
-
-                                            <h3 className="text-base font-black text-black leading-tight mb-6 group-hover:text-black transition-colors line-clamp-2 min-h-[3rem] tracking-tight">
-                                                {job.title}
-                                            </h3>
-
-                                            <div className="mt-auto pt-6 border-t border-gray-50 flex justify-end items-center">
-                                                {job.creatorId !== user.id ? (
-                                                    <button
-                                                        onClick={() => handleAccept(job._id)}
-                                                        className="px-6 py-3 bg-black hover:bg-gray-800 text-white rounded-2xl transition-all duration-300 font-black uppercase tracking-widest text-[10px] shadow-lg hover:shadow-black/10 active:scale-95 flex items-center gap-2"
-                                                    >
-                                                        Collaborate <BoltIcon className="w-3 h-3 text-white" />
-                                                    </button>
-                                                ) : (
-                                                    <div className="px-5 py-2 bg-black text-white rounded-xl text-[9px] font-black uppercase tracking-widest border border-black/10">
-                                                        Active Gig
-                                                    </div>
-                                                )}
+                                            <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
+                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Seeking/Learning</p>
+                                                <p className="text-sm font-black text-black italic uppercase tracking-tight">{swap.title}</p>
                                             </div>
+                                        </div>
+
+                                        <div className="mt-auto pt-6 border-t border-gray-50 flex justify-end items-center">
+                                            {swap.creatorId !== user.id ? (
+                                                <button
+                                                    onClick={() => handleAccept(swap._id)}
+                                                    className="w-full py-4 bg-black hover:bg-gray-800 text-white rounded-2xl transition-all duration-300 font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2"
+                                                >
+                                                    Propose Swap <BoltIcon className="w-3 h-3 text-white" />
+                                                </button>
+                                            ) : (
+                                                <div className="w-full py-3 bg-gray-100 text-gray-500 text-center rounded-xl text-[9px] font-black uppercase tracking-widest border border-gray-200">
+                                                    My Trading Post
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -294,103 +382,137 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     {view === 'working' && (
                         <div className="max-w-5xl mx-auto space-y-10">
                             <div className="text-center space-y-4 mb-14">
-                                <h2 className="text-5xl font-black text-black uppercase italic tracking-tighter">Active <span className="text-gray-400">Contracts</span></h2>
-                                <p className="text-gray-500 font-semibold text-lg">Manage your ongoing technical collaborations and deliveries</p>
+                                <h2 className="text-5xl font-black text-black uppercase italic tracking-tighter">Learning <span className="text-gray-400">Agreements</span></h2>
+                                <p className="text-gray-500 font-semibold text-lg">Manage your ongoing skill swaps and knowledge exchanges</p>
                             </div>
 
                             <div className="grid gap-10">
-                                {jobs.map(job => (
-                                    <div key={job._id} className="bg-white border-2 border-gray-100 rounded-[3.5rem] p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.03)] relative overflow-hidden group">
-                                        <div className="absolute top-0 right-0 w-64 h-64 bg-gray-50 rounded-full -translate-y-1/2 translate-x-1/2 -z-10 group-hover:scale-110 transition-transform duration-700" />
-
+                                {swaps.map(swap => (
+                                    <div key={swap._id} className="bg-white border-2 border-gray-100 rounded-[3.5rem] p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.03)] relative overflow-hidden group">
                                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-10">
                                             <div className="space-y-3">
                                                 <div className="flex items-center gap-4">
                                                     <span className={`px-4 py-1.5 rounded-2xl text-[9px] font-black uppercase tracking-widest border-2
-                                                        ${job.status === 'COMPLETED' ? 'bg-black text-white border-black shadow-sm' : 'bg-white text-black border-black animate-pulse'}`}>
-                                                        {job.status}
+                                                        ${swap.status === 'COMPLETED' ? 'bg-black text-white border-black' : 'bg-white text-black border-black animate-pulse'}`}>
+                                                        {swap.status}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-300 font-black uppercase tracking-[0.2em]">Contract ID: {job._id.slice(-8).toUpperCase()}</span>
+                                                    <span className="text-[10px] text-gray-300 font-black uppercase tracking-[0.2em]">Agreement ID: {swap._id.slice(-8).toUpperCase()}</span>
                                                 </div>
-                                                <h3 className="text-3xl font-black text-black uppercase italic tracking-tighter leading-none">{job.title}</h3>
+                                                <h3 className="text-3xl font-black text-black uppercase italic tracking-tighter leading-none">{swap.offering} ↔ {swap.title}</h3>
                                             </div>
-                                            {job.status === 'IN_PROGRESS' && (
-                                                <button
-                                                    onClick={() => handleUncollaborate(job._id)}
-                                                    className="px-5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all"
-                                                >
-                                                    Uncollaborate
-                                                </button>
+                                            {swap.status === 'IN_PROGRESS' && (
+                                                <div className="flex gap-4">
+                                                    <button
+                                                        onClick={() => handleComplete(swap._id)}
+                                                        className="px-6 py-3 bg-black hover:bg-gray-800 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg transition-all flex items-center gap-2"
+                                                    >
+                                                        Complete Swap <BoltIcon className="w-4 h-4 text-white" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUncollaborate(swap._id)}
+                                                        className="px-5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all"
+                                                    >
+                                                        Cancel Agreement
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
 
                                         <p className="text-slate-500 text-base leading-relaxed mb-12 pb-12 border-b-2 border-dashed border-slate-100 font-medium">
-                                            {job.description}
+                                            {swap.description}
                                         </p>
 
-                                        {job.status === 'IN_PROGRESS' && (
-                                            <div className="space-y-8 bg-gray-50 p-10 rounded-[2.5rem] border-2 border-black/10">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="p-3 bg-black rounded-2xl shadow-lg shadow-black/10">
-                                                            <BoltIcon className="w-6 h-6 text-white" />
+                                        {swap.status === 'IN_PROGRESS' && (
+                                            <div className="mb-12 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                                {/* Collaboration: Shared Plan */}
+                                                <div className="bg-slate-50 border-2 border-black/5 rounded-[2.5rem] p-8 flex flex-col gap-6">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white shadow-lg">
+                                                                <StarIcon className="w-5 h-5" />
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="text-[11px] font-black text-black uppercase tracking-widest">Shared Learning Plan</h4>
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase">Outline your milestones together</p>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => startMeeting(swap._id)}
+                                                            className="flex items-center gap-2 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md group"
+                                                        >
+                                                            Launch Lumo Meeting <VideoIcon className="w-3 h-3 group-hover:rotate-12 transition-transform" />
+                                                        </button>
+                                                    </div>
+                                                    <textarea 
+                                                        className="flex-1 min-h-[180px] w-full p-6 bg-white border-2 border-transparent rounded-2xl text-sm font-semibold focus:border-black/10 focus:ring-4 focus:ring-black/5 transition-all resize-none shadow-sm"
+                                                        placeholder="Plan:
+Step 1: Introduction to basics
+Step 2: Hands-on project
+Step 3: Advanced techniques..."
+                                                        defaultValue={swap.sharedPlan || ''}
+                                                        onBlur={(e) => handleUpdatePlan(swap._id, e.target.value)}
+                                                    />
+                                                </div>
+
+                                                {/* Collaboration: Chat Hub */}
+                                                <div className="bg-slate-50 border-2 border-black/5 rounded-[2.5rem] p-8 flex flex-col gap-6 max-h-[400px]">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white shadow-lg">
+                                                            <ChatIcon className="w-5 h-5" />
                                                         </div>
                                                         <div>
-                                                            <h4 className="text-[11px] font-black text-black uppercase tracking-widest">Technical Delivery Terminal</h4>
-                                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Files verified by Lumo Arbitrator AI</p>
+                                                            <h4 className="text-[11px] font-black text-black uppercase tracking-widest">Skill Swap Chat</h4>
+                                                            <p className="text-[9px] font-bold text-gray-400 uppercase">Communicate with your swap partner</p>
                                                         </div>
                                                     </div>
-                                                </div>
-                                                <textarea
-                                                    className="w-full h-64 p-8 bg-white border-2 border-gray-100 rounded-[2rem] text-black font-medium text-base focus:ring-4 focus:ring-black/5 focus:border-black transition-all shadow-xl shadow-black/5 placeholder:text-gray-300 resize-none"
-                                                    placeholder="Inject your source code, technical breakdown, or delivery URL here..."
-                                                    value={selectedJob?._id === job._id ? submissionText : ''}
-                                                    onChange={(e) => {
-                                                        setSelectedJob(job);
-                                                        setSubmissionText(e.target.value);
-                                                    }}
-                                                />
-                                                <div className="flex justify-between items-center bg-white px-8 py-4 rounded-3xl shadow-sm border border-gray-100">
-                                                    <div className="flex items-center gap-2 text-black font-black text-[10px] uppercase tracking-widest">
-                                                        <span className="w-2 h-2 rounded-full bg-black animate-pulse" />
-                                                        Encrypted Channel Active
+
+                                                    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar no-scrollbar">
+                                                        {(swap.messages || []).length === 0 && (
+                                                            <p className="text-center text-gray-400 text-[10px] font-black uppercase tracking-widest mt-10">No messages yet. Say hello!</p>
+                                                        )}
+                                                        {swap.messages?.map((msg, idx) => (
+                                                            <div key={idx} className={`flex flex-col ${msg.senderId === user.id ? 'items-end' : 'items-start'}`}>
+                                                                <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm font-semibold shadow-sm
+                                                                    ${msg.senderId === user.id ? 'bg-black text-white' : 'bg-white text-black border border-black/5'}`}>
+                                                                    {msg.text}
+                                                                </div>
+                                                                <span className="text-[8px] font-bold text-gray-400 uppercase mt-1 tracking-widest">
+                                                                    {msg.senderName} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleSubmit(job._id)}
-                                                        disabled={!submissionText || (selectedJob?._id !== job._id)}
-                                                        className="px-14 py-5 bg-black hover:bg-gray-800 disabled:opacity-50 text-white font-black uppercase italic tracking-[0.2em] text-[11px] rounded-2xl transition-all shadow-2xl shadow-black/20 active:scale-95 group flex items-center gap-3"
-                                                    >
-                                                        Final Delivery <SendIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                                    </button>
+
+                                                    <div className="flex gap-3 pt-4 border-t border-black/5">
+                                                        <input 
+                                                            type="text" 
+                                                            className="flex-1 px-5 py-3 bg-white border-2 border-transparent rounded-xl text-sm font-bold focus:border-black/10 focus:ring-4 focus:ring-black/5 transition-all shadow-sm"
+                                                            placeholder="Type a message..."
+                                                            value={msgText}
+                                                            onChange={e => setMsgText(e.target.value)}
+                                                            onKeyDown={e => e.key === 'Enter' && handleSendMessage(swap._id)}
+                                                        />
+                                                        <button 
+                                                            onClick={() => handleSendMessage(swap._id)}
+                                                            className="p-3 bg-black hover:bg-gray-800 text-white rounded-xl shadow-lg transition-all active:scale-95"
+                                                        >
+                                                            <SendIcon className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {job.aiVerdict && (
-                                            <div className={`mt-10 p-10 rounded-[3rem] border-4 flex flex-col md:flex-row items-center gap-10
-                                                ${job.aiVerdict.approved ? 'bg-gray-50 border-black' : 'bg-gray-50 border-gray-400'}`}>
+                                        {swap.aiVerdict && (
+                                            <div className={`mt-10 p-10 rounded-[3rem] border-4 flex flex-col md:flex-row items-center gap-10 bg-gray-50 ${swap.aiVerdict.approved ? 'border-black' : 'border-gray-400'}`}>
                                                 <div className="relative">
-                                                    <div className={`w-32 h-32 rounded-full border-8 flex items-center justify-center
-                                                        ${job.aiVerdict.approved ? 'border-black bg-white text-black' : 'border-gray-400 bg-white text-gray-400'}`}>
-                                                        <span className="text-3xl font-black italic">{job.aiVerdict.score}%</span>
-                                                    </div>
-                                                    <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest text-white shadow-lg
-                                                        ${job.aiVerdict.approved ? 'bg-black' : 'bg-gray-400'}`}>
-                                                        Verdict
+                                                    <div className={`w-32 h-32 rounded-full border-8 flex items-center justify-center bg-white ${swap.aiVerdict.approved ? 'border-black text-black' : 'border-gray-400 text-gray-400'}`}>
+                                                        <span className="text-3xl font-black italic">{swap.aiVerdict.score}%</span>
                                                     </div>
                                                 </div>
-                                                <div className="space-y-4 flex-1 text-center md:text-left">
-                                                    <div className="flex items-center justify-center md:justify-start gap-4">
-                                                        <p className="text-[11px] font-black text-black uppercase tracking-[0.25em]">AI Arbitration Report</p>
-                                                        <div className={`w-full max-w-[100px] h-1.5 rounded-full overflow-hidden bg-gray-200`}>
-                                                            <div className={`h-full transition-all duration-1000 ${job.aiVerdict.approved ? 'bg-black' : 'bg-gray-400'}`} style={{ width: `${job.aiVerdict.score}%` }} />
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-gray-600 text-lg italic font-semibold leading-relaxed">"{job.aiVerdict.reason}"</p>
-                                                    <div className="flex items-center justify-center md:justify-start gap-6">
-                                                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Review Date: {new Date(job.completedAt || Date.now()).toLocaleDateString()}</span>
-                                                        <span className="text-[9px] font-black text-black uppercase tracking-widest cursor-pointer hover:underline">Download Receipt PDF</span>
-                                                    </div>
+                                                <div className="space-y-4 flex-1">
+                                                    <p className="text-[11px] font-black text-black uppercase tracking-[0.25em]">AI Verification Report</p>
+                                                    <p className="text-gray-600 text-lg italic font-semibold leading-relaxed">"{swap.aiVerdict.reason}"</p>
                                                 </div>
                                             </div>
                                         )}
@@ -403,43 +525,50 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     {view === 'posted' && (
                         <div className="grid grid-cols-1 xl:grid-cols-12 gap-16">
                             <div className="xl:col-span-5">
-                                <div className="bg-white border-2 border-gray-100 rounded-[4rem] p-12 shadow-2xl shadow-black/5 sticky top-12 overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-full h-3 bg-black" />
-
+                                <div className="bg-white border-2 border-gray-100 rounded-[4rem] p-12 shadow-2xl shadow-black/5 sticky top-12">
                                     <div className="mb-12">
                                         <div className="w-16 h-16 bg-gray-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner border border-gray-100">
-                                            <BoltIcon className="w-9 h-9 text-black" />
+                                            <SparklesIcon className="w-9 h-9 text-black" />
                                         </div>
-                                        <h3 className="text-4xl font-black text-black uppercase italic tracking-tighter mb-2">Initialize <span className="text-gray-400">Gig</span></h3>
-                                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.3em]">Deploy a new micro-contract to the talent pool</p>
+                                        <h3 className="text-4xl font-black text-black uppercase italic tracking-tighter mb-2">Initialize <span className="text-gray-400">Swap</span></h3>
+                                        <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.3em]">Deploy a new talent trade request to the arena</p>
                                     </div>
 
                                     <div className="space-y-8">
                                         <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">Project Headline</label>
+                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">What skill can you teach?</label>
                                             <input
                                                 type="text"
                                                 className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-black font-black focus:bg-white focus:border-black/30 transition-all placeholder:text-gray-300 text-base"
-                                                placeholder="e.g. Architect an LLM RAG Pipeline..."
-                                                value={newTitle}
-                                                onChange={e => setNewTitle(e.target.value)}
+                                                placeholder="e.g. Master of Classical Guitar..."
+                                                value={newOffering}
+                                                onChange={e => setNewOffering(e.target.value)}
                                             />
                                         </div>
                                         <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">Technical Specification</label>
+                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">What skill do you want to learn?</label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-black font-black focus:bg-white focus:border-black/30 transition-all placeholder:text-gray-300 text-base"
+                                                placeholder="e.g. Python for Data Science..."
+                                                value={newSeeking}
+                                                onChange={e => setNewSeeking(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">Barter Details</label>
                                             <textarea
-                                                className="w-full px-8 py-6 bg-gray-50 border-2 border-transparent rounded-[2.5rem] text-black font-semibold focus:bg-white focus:border-black/30 transition-all placeholder:text-gray-400 min-h-[200px] text-sm leading-relaxed"
-                                                placeholder="Break down the required tech stack, deliverables, and performance metrics..."
+                                                className="w-full px-8 py-6 bg-gray-50 border-2 border-transparent rounded-[2.5rem] text-black font-semibold focus:bg-white focus:border-black/30 transition-all placeholder:text-gray-400 min-h-[150px] text-sm leading-relaxed"
+                                                placeholder="Describe the trade: frequency, level of expertise, etc..."
                                                 value={newDesc}
                                                 onChange={e => setNewDesc(e.target.value)}
                                             />
                                         </div>
-
                                         <button
-                                            onClick={handlePostJob}
-                                            className="w-full py-6 bg-black hover:bg-gray-900 text-white font-black uppercase italic tracking-[0.25em] text-[11px] rounded-[2rem] transition-all shadow-2xl shadow-black/10 active:scale-[0.98]"
+                                            onClick={handlePostSwap}
+                                            className="w-full py-6 bg-black hover:bg-gray-900 text-white font-black uppercase italic tracking-[0.25em] text-[11px] rounded-[2rem] transition-all shadow-2xl active:scale-[0.98]"
                                         >
-                                            Deploy Contract
+                                            Post Trade Request
                                         </button>
                                     </div>
                                 </div>
@@ -447,59 +576,50 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
 
                             <div className="xl:col-span-7 space-y-8">
                                 <div className="flex items-center justify-between mb-8 px-6">
-                                    <h3 className="text-3xl font-black text-black uppercase italic tracking-tighter">My <span className="text-gray-400">Requests</span></h3>
-                                    <div className="px-4 py-1.5 bg-gray-100 rounded-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest shadow-inner">Active Listings: {jobs.length}</div>
+                                    <h3 className="text-3xl font-black text-black uppercase italic tracking-tighter">My <span className="text-gray-400">Trade Posts</span></h3>
                                 </div>
 
-                                {jobs.map(job => (
-                                    <div key={job._id} className="bg-white border-2 border-gray-100 p-10 rounded-[3.5rem] flex flex-col md:flex-row items-center gap-10 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.02)] group hover:border-black/30 hover:shadow-xl hover:shadow-black/5 transition-all duration-500">
-
-                                        <div className="flex-1 text-center md:text-left space-y-3">
-                                            <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-2">
+                                {swaps.map(swap => (
+                                    <div key={swap._id} className="bg-white border-2 border-gray-100 p-10 rounded-[3.5rem] flex flex-col md:flex-row shadow-[0_15px_40px_-10px_rgba(0,0,0,0.02)] hover:border-black/30 transition-all duration-500">
+                                        <div className="flex-1 space-y-3">
+                                            <div className="flex flex-wrap gap-4 mb-2">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`w-2.5 h-2.5 rounded-full ${job.status === 'OPEN' ? 'bg-black' : 'bg-gray-400 animate-pulse shadow-[0_0_8px_rgba(0,0,0,0.1)]'}`} />
-                                                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-[0.2em]">{job.status}</span>
-                                                </div>
-                                                <div className="text-[9px] font-black uppercase text-gray-300 tracking-[0.2em] border-l border-gray-100 pl-4">
-                                                    Freelancer: <span className="text-black italic">{job.freelancerName || 'N/A'}</span>
+                                                    <span className={`w-2.5 h-2.5 rounded-full ${swap.status === 'OPEN' ? 'bg-black' : 'bg-gray-400'}`} />
+                                                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-[0.2em]">{swap.status}</span>
                                                 </div>
                                             </div>
-                                            {editingJobId === job._id ? (
-                                                <div className="space-y-2">
-                                                    <input className="w-full px-4 py-2 border rounded" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
-                                                    <textarea className="w-full px-4 py-2 border rounded" value={editDesc} onChange={e => setEditDesc(e.target.value)} />
+                                            {editingSwapId === swap._id ? (
+                                                <div className="space-y-3">
+                                                    <input className="w-full px-4 py-2 border rounded-xl" value={editOffering} onChange={e => setEditOffering(e.target.value)} placeholder="Offering..." />
+                                                    <input className="w-full px-4 py-2 border rounded-xl" value={editSeeking} onChange={e => setEditSeeking(e.target.value)} placeholder="Seeking..." />
+                                                    <textarea className="w-full px-4 py-2 border rounded-xl" value={editDesc} onChange={e => setEditDesc(e.target.value)} />
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => handleUpdate(job._id)} className="px-4 py-2 bg-black text-white text-[10px] uppercase font-black tracking-widest rounded-xl">Save</button>
-                                                        <button onClick={() => setEditingJobId(null)} className="px-4 py-2 bg-gray-200 text-black text-[10px] uppercase font-black tracking-widest rounded-xl">Cancel</button>
+                                                        <button onClick={() => handleUpdate(swap._id)} className="px-4 py-2 bg-black text-white text-[10px] uppercase font-black tracking-widest rounded-xl">Save</button>
+                                                        <button onClick={() => setEditingSwapId(null)} className="px-4 py-2 bg-gray-200 text-black text-[10px] uppercase font-black tracking-widest rounded-xl">Cancel</button>
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <h4 className="text-2xl font-black text-black uppercase italic tracking-tight group-hover:text-black transition-colors leading-none">{job.title}</h4>
-                                                    <p className="text-gray-400 text-sm font-semibold italic line-clamp-1 max-w-md">{job.description}</p>
+                                                    <h4 className="text-2xl font-black text-black uppercase italic leading-none">{swap.offering} ↔ {swap.title}</h4>
+                                                    <p className="text-gray-400 text-sm font-semibold italic line-clamp-2">{swap.description}</p>
                                                 </>
                                             )}
                                         </div>
-                                        <div className="text-center md:text-right min-w-[120px] flex flex-col gap-2">
-                                            {editingJobId !== job._id && (
+                                        <div className="flex flex-col gap-2 min-w-[120px] mt-6 md:mt-0">
+                                            {editingSwapId !== swap._id && (
                                                 <>
-                                                    <button onClick={() => startEditing(job)} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all border border-slate-200">Edit</button>
-                                                    <button onClick={() => handleDelete(job._id)} className="px-5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all border border-red-100">Delete</button>
+                                                    <button onClick={() => startEditing(swap)} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase tracking-widest text-[10px] border border-slate-200">Edit</button>
+                                                    <button onClick={() => handleDelete(swap._id)} className="px-5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-black uppercase tracking-widest text-[10px] border border-red-100">Delete</button>
                                                 </>
                                             )}
                                         </div>
                                     </div>
                                 ))}
 
-                                {jobs.length === 0 && (
-                                    <div className="py-40 text-center bg-white border-4 border-dashed border-gray-100 rounded-[5rem] flex flex-col items-center justify-center space-y-6">
-                                        <div className="p-8 bg-gray-50 rounded-full border-2 border-white shadow-inner">
-                                            <FilterIcon className="w-16 h-16 text-gray-200" />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-black font-black text-2xl uppercase italic tracking-tighter">No Active Gigs</p>
-                                            <p className="text-gray-400 font-black text-[10px] uppercase tracking-[0.3em]">Your hiring pipeline is currently empty</p>
-                                        </div>
+                                {swaps.length === 0 && (
+                                    <div className="py-40 text-center bg-white border-4 border-dashed border-gray-100 rounded-[5rem] flex flex-col items-center justify-center space-y-4">
+                                        <p className="text-black font-black text-2xl uppercase italic tracking-tighter">No Active Trades</p>
+                                        <p className="text-gray-400 font-black text-[10px] uppercase tracking-[0.3em]">Your talent pipeline is currently empty</p>
                                     </div>
                                 )}
                             </div>

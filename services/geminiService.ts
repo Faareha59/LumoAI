@@ -4,11 +4,12 @@ import { createAudioUrlFromBase64 } from './audioUtils';
 
 // Lazily init AI to prevent crash if key is missing at module load time
 const getAI = () => {
-    const key = process.env.API_KEY;
+    // In Browser, this might fail unless injected. 
+    // We are migrating critical features to backend proxy.
+    const key = process.env.API_KEY || (window as any).VITE_API_KEY;
     if (!key) {
-        console.warn("Google GenAI API Key is missing. AI features will fail.");
-        // We throw here or return a dummy. Throwing ensures we don't try to use an invalid client.
-        throw new Error("Missing API Key");
+        // console.warn("Google GenAI API Key is missing. Browser-direct AI features will fail.");
+        return null;
     }
     return new GoogleGenAI({ apiKey: key });
 };
@@ -116,12 +117,8 @@ const inferVisualTheme = (keywords: string[], description?: string): string => {
 
 
 export const startChat = () => {
-    chat = getAI().chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction: "You are Lumo, a friendly and helpful AI study assistant for a learning platform. Keep your answers concise and focused on educational topics. When asked about non-academic subjects, politely steer the conversation back to learning."
-        }
-    });
+    // For backend proxy, we don't need to init a client-side chat session
+    console.log("Chat system initialized (backend proxy active)");
 };
 
 export const generateImagesForSlidesViaPexels = async (
@@ -153,15 +150,26 @@ export const generateImagesForSlidesViaPexels = async (
 };
 
 export const sendMessageToChatbot = async (message: string): Promise<string> => {
-    if (!chat) {
-        startChat();
-    }
     try {
-        const response: GenerateContentResponse = await chat.sendMessage({ message });
-        return response.text;
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ message })
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to connect to AI server');
+        }
+
+        const data = await response.json();
+        return data.text;
     } catch (error) {
         console.error("Error sending message to chatbot:", error);
-        throw new Error("Failed to get a a response from the AI assistant.");
+        throw error;
     }
 };
 

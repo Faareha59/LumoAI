@@ -100,12 +100,18 @@ export interface StudentQuestion {
     question: string;
 }
 
-export interface MarketplaceJob {
+export interface SkillSwap {
     _id: string;
-    title: string;
+    title: string; // The skill being sought
+    offering: string; // The skill being offered
     description: string;
-    budget: number;
-    currency: string;
+    sharedPlan?: string; // Collaborative learning plan
+    messages?: {
+        senderId: string;
+        senderName: string;
+        text: string;
+        createdAt: string;
+    }[];
     creatorId: string;
     creatorName: string;
     freelancerId?: string;

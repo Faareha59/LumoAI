@@ -1468,11 +1468,12 @@ app.post('/api/marketplace/jobs', async (req, res) => {
   try {
     const user = await getUserFromAuth(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const { title, description } = req.body || {};
-    if (!title || !description) return res.status(400).json({ error: 'Missing fields' });
+    const { title, description, offering } = req.body || {};
+    if (!title || !description || !offering) return res.status(400).json({ error: 'Missing fields' });
 
     const job = {
-      title,
+      title, // Seeking
+      offering, // Giving
       description,
       creatorId: user._id,
       creatorName: user.name,
@@ -1555,7 +1556,7 @@ app.put('/api/marketplace/jobs/:id', async (req, res) => {
     const user = await getUserFromAuth(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const { id } = req.params;
-    const { title, description } = req.body;
+    const { title, description, offering } = req.body;
 
     const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
     if (!job) return res.status(404).json({ error: 'Job not found' });
@@ -1563,7 +1564,7 @@ app.put('/api/marketplace/jobs/:id', async (req, res) => {
 
     await db.collection('marketplace_jobs').updateOne(
       { _id: new ObjectId(id) },
-      { $set: { title, description, updatedAt: new Date() } }
+      { $set: { title, description, offering, updatedAt: new Date() } }
     );
     return res.json({ success: true });
   } catch (e) {
@@ -1663,6 +1664,164 @@ app.post('/api/marketplace/jobs/:id/submit', async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Failed to submit work' });
+  }
+});
+
+// Collaboration: Messages
+app.post('/api/marketplace/jobs/:id/messages', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Message text required' });
+
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Agreement not found' });
+    
+    // Auth check: part of agreement? 
+    if (job.creatorId.toString() !== user._id.toString() && job.freelancerId?.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not part of this agreement' });
+    }
+
+    const newMessage = {
+      senderId: user._id.toString(),
+      senderName: user.name,
+      text,
+      createdAt: new Date().toISOString()
+    };
+
+    await db.collection('marketplace_jobs').updateOne(
+      { _id: new ObjectId(id) },
+      { $push: { messages: newMessage } }
+    );
+    return res.json({ success: true, message: newMessage });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Collaboration: Shared Plan
+app.put('/api/marketplace/jobs/:id/plan', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const { plan } = req.body;
+
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Agreement not found' });
+    
+    if (job.creatorId.toString() !== user._id.toString() && job.freelancerId?.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not part of this agreement' });
+    }
+
+    await db.collection('marketplace_jobs').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { sharedPlan: plan } }
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to update plan' });
+  }
+});
+
+// Collaboration: Manual Completion
+app.post('/api/marketplace/jobs/:id/complete', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Agreement not found' });
+    
+    if (job.creatorId.toString() !== user._id.toString() && job.freelancerId?.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not part of this agreement' });
+    }
+
+    await db.collection('marketplace_jobs').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'COMPLETED', completedAt: new Date() } }
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to complete swap' });
+  }
+});
+
+// Live Q&A Chatbot: Proxy Endpoint (Robust Fallback)
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, history } = req.body || {};
+    if (!message) return res.status(400).json({ error: 'Message required' });
+
+    const systemPrompt = "You are Lumo, a friendly and helpful AI study assistant for a learning platform. Keep your answers concise and focused on educational topics. When asked about non-academic subjects, politely steer the conversation back to learning.";
+
+    // 1. Try Gemini Phase
+    const aiService = getAI();
+    if (aiService) {
+      try {
+        console.log('[Chat] Attempting Gemini...');
+        const contents = [
+          { role: 'user', parts: [{ text: systemPrompt }] },
+          { role: 'model', parts: [{ text: 'Understood! I am Lumo, your AI study assistant. How can I help you today?' }] },
+          ...(history || []).map((h) => ({
+            role: h.role === 'user' ? 'user' : 'model',
+            parts: [{ text: h.text }]
+          })),
+          { role: 'user', parts: [{ text: message }] }
+        ];
+
+        const response = await aiService.models.generateContent({
+          model: 'gemini-1.5-flash',
+          contents
+        });
+
+        const replyText = response.text ? (typeof response.text === 'function' ? response.text() : response.text) : "";
+        if (replyText) {
+          console.log('[Chat] Gemini Success');
+          return res.json({ text: replyText, reply: replyText });
+        }
+      } catch (geminiErr) {
+        console.warn('[Chat] Gemini failed, falling back to Groq:', geminiErr?.message || geminiErr);
+      }
+    }
+
+    // 2. Try Groq Phase (Fallback)
+    const groqClient = getGroq();
+    if (groqClient) {
+      try {
+        console.log('[Chat] Attempting Groq fallback...');
+        const messages = [
+          { role: 'system', content: systemPrompt },
+          ...(history || []).map((h) => ({
+            role: h.role === 'user' ? 'user' : 'assistant',
+            content: h.text
+          })),
+          { role: 'user', content: message }
+        ];
+
+        const completion = await groqClient.chat.completions.create({
+          messages,
+          model: 'llama-3.3-70b-versatile',
+          max_tokens: 1000
+        });
+
+        const reply = completion.choices[0]?.message?.content?.trim();
+        if (reply) {
+          console.log('[Chat] Groq Success');
+          return res.json({ text: reply, reply: reply });
+        }
+      } catch (groqErr) {
+        console.error('[Chat] Groq also failed:', groqErr?.message || groqErr);
+      }
+    }
+
+    return res.status(500).json({ error: 'Unable to get response from any AI service' });
+  } catch (e) {
+    console.error('Chat API Fatal Error:', e.message || e);
+    return res.status(500).json({ error: 'Internal server error in chat' });
   }
 });
 

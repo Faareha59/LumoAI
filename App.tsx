@@ -26,6 +26,7 @@ const App: React.FC = () => {
     const [showSplash, setShowSplash] = useState(true);
     const [showAdminConsole, setShowAdminConsole] = useState(false);
     const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
+    const [meetingRoomId, setMeetingRoomId] = useState<string | undefined>(undefined);
 
     // Local storage helpers for enrollment persistence per user
     const enrollKey = (uid: string) => `enrollments:${uid}`;
@@ -253,9 +254,15 @@ const App: React.FC = () => {
                     onExit={() => setCurrentView('student_dashboard')}
                 />;
             case 'lumo_meeting':
-                return <LumoMeeting />;
+                return <LumoMeeting initialRoomId={meetingRoomId} />;
             case 'marketplace':
-                return <Marketplace user={user} />;
+                return <Marketplace 
+                    user={user} 
+                    onStartMeeting={(roomId: string) => {
+                        setMeetingRoomId(roomId);
+                        setCurrentView('lumo_meeting');
+                    }}
+                />;
             case 'my_exercises':
                 return <MyExercises courses={courses} />;
             case 'video_generator':

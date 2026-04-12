@@ -2,19 +2,26 @@
 import React, { useState, useEffect } from 'react';
 import { VideoIcon } from '../Icons';
 
-const LumoMeeting: React.FC = () => {
-    const [meetingId, setMeetingId] = useState('');
+const LumoMeeting: React.FC<{ initialRoomId?: string }> = ({ initialRoomId }) => {
+    const [meetingId, setMeetingId] = useState(initialRoomId || '');
     const [inMeeting, setInMeeting] = useState(false);
     const [generatedLink, setGeneratedLink] = useState('');
+
+    useEffect(() => {
+        if (initialRoomId) {
+            handleJoin(initialRoomId);
+        }
+    }, [initialRoomId]);
 
     const generateMeetingId = () => {
         const randomId = `LumoAI-${Math.random().toString(36).substring(7)}`;
         setMeetingId(randomId);
     };
 
-    const handleJoin = () => {
-        if (!meetingId.trim()) return;
-        setGeneratedLink(`https://meet.jit.si/${meetingId}`);
+    const handleJoin = (id?: string) => {
+        const finalId = id || meetingId;
+        if (!finalId.trim()) return;
+        setGeneratedLink(`https://meet.jit.si/${finalId}`);
         setInMeeting(true);
     };
 
