@@ -4,13 +4,12 @@ import { Role } from '../types';
 import Button from './common/Button';
 import { DeleteIcon, SparklesIcon, QuestionIcon, ChevronRightIcon, ChevronLeftIcon, PlusIcon, VideoIcon } from './Icons';
 import Loader from './common/Loader';
-import CourseGenerator from './teacher/CourseGenerator';
 import ManualCourseCreator from './teacher/ManualCourseCreator';
 import CoursePortalCreator from './teacher/CoursePortalCreator';
 import VisualAIPlayer from './student/VisualAIPlayer';
 
 import { generateCourseModules } from '../services/geminiService';
-import { deleteCourse as apiDeleteCourse } from '../services/coursesService';
+import { deleteCourse as apiDeleteCourse, updateCourse as apiUpdateCourse } from '../services/coursesService';
 import { uploadMaterial, listMaterials } from '../services/materialsService';
 import { generateQuiz, generatePdfQuiz, submitQuiz, getAttemptsSummary, getLastAttempt } from '../services/quizService';
 import { generateExercise, saveExercise } from '../services/exerciseService';
@@ -36,6 +35,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
     const [isCreatingCourse, setIsCreatingCourse] = useState(false);
     const [creationMode, setCreationMode] = useState<'none' | 'ai' | 'manual' | 'portal'>('none');
+    const [editingPortalCourse, setEditingPortalCourse] = useState<Course | null>(null);
     const [visualAI, setVisualAI] = useState<{
         materialId: string;
         topic: string;
@@ -47,6 +47,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const toggleCourse = (courseId: string) => {
         setExpandedCourses(prev => ({ ...prev, [courseId]: !prev[courseId] }));
     };
+
+
 
     const handleSaveNewCourse = async (subject: string, modules: CourseModule[]) => {
         try {
@@ -408,18 +410,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     );
 
     const renderTeacherCourseMgmt = () => {
-        if (creationMode === 'ai') {
-            return (
-                <CourseGenerator
-                    onCreateCourse={async (subject, modules) => {
-                        return await handleSaveNewCourse(subject, modules);
-                    }}
-                    onCancel={() => setCreationMode('none')}
-                    onRefreshCourses={onRefreshCourses}
-                />
-            );
-        }
-
         if (creationMode === 'manual') {
             return (
                 <ManualCourseCreator
@@ -435,15 +425,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
         if (creationMode === 'portal') {
             return (
                 <CoursePortalCreator
-                    onCreateCourse={async (subject, modules) => {
-                        const course = await handleSaveNewCourse(subject, modules);
-                        setCreationMode('none');
-                        return course;
+                    initialCourse={editingPortalCourse || undefined}
+                    initialMaterials={editingPortalCourse ? materialsByModule[editingPortalCourse.modules[0]?.id] : undefined}
+                    onCreateCourse={handleSaveNewCourse}
+                    onUpdateCourse={async (courseId: string, title?: string, description?: string) => {
+                        await apiUpdateCourse(courseId, { title, description });
+                        onRefreshCourses?.();
                     }}
-                    onCancel={() => setCreationMode('none')}
+                    onUpdateModuleTopics={onUpdateModuleTopics}
+                    onCancel={() => {
+                        setCreationMode('none');
+                        setEditingPortalCourse(null);
+                    }}
                     onRefreshCourses={onRefreshCourses}
                 />
-
             );
         }
 
@@ -456,14 +451,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                         <p className="text-gray-500">Manage curriculum and content.</p>
                     </div>
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setCreationMode('manual')}>
-                            <PlusIcon className="w-5 h-5 mr-2" />
-                            Manual Create
-                        </Button>
-                        <Button onClick={() => setCreationMode('ai')}>
-                            <SparklesIcon className="w-5 h-5 mr-2" />
-                            AI Create
-                        </Button>
                         <Button variant="secondary" onClick={() => setCreationMode('portal')}>
                             <PlusIcon className="w-5 h-5 mr-2" />
                             Course Portal
@@ -483,28 +470,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                 {courses.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
                         <p className="mb-4 text-lg">You haven't created any courses yet.</p>
-                        <Button variant="outline" onClick={() => setCreationMode('manual')}>Create one now</Button>
+                        <Button variant="outline" onClick={() => setCreationMode('portal')}>Open Course Portal</Button>
                     </div>
                 ) : (
                     <div className="grid gap-4">
                         {courses.filter(c => c.title.toLowerCase().includes(filter.toLowerCase())).map(course => (
                             <div key={course.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-                                <div className="flex justify-between items-start p-5 cursor-pointer hover:bg-gray-50/50 transition-colors" onClick={() => toggleCourse(course.id)}>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="text-xl font-bold text-black">{course.title}</h3>
-                                            <span className={`transform transition-transform duration-200 ${expandedCourses[course.id] ? 'rotate-90' : ''}`}>
-                                                <ChevronRightIcon className="w-5 h-5 text-gray-400" />
-                                            </span>
+                                    <div className="flex justify-between items-start p-5 cursor-pointer hover:bg-gray-50/50 transition-colors" onClick={() => toggleCourse(course.id)}>
+                                        <div className="flex-1 pr-4">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h3 className="text-xl font-bold text-black">{course.title}</h3>
+                                                <span className={`transform transition-transform duration-200 ${expandedCourses[course.id] ? 'rotate-90' : ''}`}>
+                                                    <ChevronRightIcon className="w-5 h-5 text-gray-400" />
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-500 line-clamp-2">{course.description}</p>
                                         </div>
-                                        <p className="text-sm text-gray-500 line-clamp-1">{course.description}</p>
+                                        <div className="flex gap-2 items-center">
+                                            <Button size="sm" variant="outline" onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setEditingPortalCourse(course);
+                                                setCreationMode('portal');
+                                            }}>
+                                                Edit
+                                            </Button>
+                                            <Button variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course.id); }}>
+                                                <DeleteIcon className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Button variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course.id); }}>
-                                            <DeleteIcon className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
                                 {expandedCourses[course.id] && (
                                     <div className="pl-4 border-l-2 border-border space-y-4">
                                         {course.modules.length > 0 ? (
@@ -524,136 +518,31 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                     </div>
                                                     {expandedModules[module.id] && (
                                                         <div className="mt-4 pt-4 border-t border-border space-y-4">
-                                                            <div>
-                                                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Curriculum Topics & Lectures</label>
-                                                                <div className="space-y-3 mb-4">
-                                                                    {(module.topics || []).map(topic => (
-                                                                        <div key={topic} className="p-3 bg-secondary/5 border border-border rounded-lg space-y-2">
-                                                                            <div className="flex justify-between items-center">
-                                                                                <span className="text-sm font-bold">{topic}</span>
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <Button size="xs" variant="outline" onClick={async () => {
-                                                                                        try {
-                                                                                            setUploading(prev => ({ ...prev, [module.id + topic]: true }));
-                                                                                            const res = await fetch(`/api/courses/${course.id}/modules/${module.id}/generate-notes`, {
-                                                                                                method: 'POST',
-                                                                                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                                                                                                body: JSON.stringify({ topic, outline: module.topicOutlines?.[topic] || "" })
-                                                                                            });
-                                                                                            if (res.ok) {
-                                                                                                alert(`PDF for "${topic}" generated!`);
-                                                                                                loadMaterials(course.id, module.id);
-                                                                                                onRefreshCourses?.();
-                                                                                            } else {
-                                                                                                alert('Failed to generate PDF');
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.error(e);
-                                                                                            alert('Error generating PDF');
-                                                                                        } finally {
-                                                                                            setUploading(prev => ({ ...prev, [module.id + topic]: false }));
-                                                                                        }
-                                                                                    }} disabled={!!uploading[module.id + topic]}>
-                                                                                        {uploading[module.id + topic] ? '...' : '✨ PDF'}
-                                                                                    </Button>
-                                                                                    <button onClick={() => removeTopic(course.id, module, topic)} className="text-black hover:text-gray-700 p-1">
-                                                                                        <DeleteIcon className="w-4 h-4" />
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            <textarea
-                                                                                value={module.topicOutlines?.[topic] || ""}
-                                                                                onChange={(e) => updateTopicOutline(course.id, module, topic, e.target.value)}
-                                                                                placeholder="Lecture outline (used for AI textbook generation)..."
-                                                                                className="w-full text-xs p-2 bg-background border border-border rounded h-16 resize-none focus:ring-1 focus:ring-black"
-                                                                            />
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                                <div className="flex gap-2">
-                                                                    <input
-                                                                        className="flex-1 p-1.5 text-sm bg-background border border-border rounded"
-                                                                        placeholder="Add topic..."
-                                                                        value={topicInputs[module.id] || ''}
-                                                                        onChange={e => setTopicInputs(prev => ({ ...prev, [module.id]: e.target.value }))}
-                                                                    />
-                                                                    <Button size="sm" onClick={() => addTopic(course.id, module)}>Add</Button>
-                                                                    <Button size="sm" variant="secondary" onClick={() => generateOutlines(course.id, module, course.title)} disabled={!!uploading[module.id + '_outlines']}>
-                                                                        {uploading[module.id + '_outlines'] ? '...' : '✨ AI Outline'}
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-
-                                                            <div>
-                                                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">AI Video Lectures</label>
-                                                                {module.lectures.length > 0 ? (
-                                                                    <div className="space-y-2">
-                                                                        {module.lectures.map(l => (
-                                                                            <div key={l.id} className="flex justify-between items-center p-2 bg-background rounded border border-border">
-                                                                                <span className="text-sm font-medium">{l.title}</span>
-                                                                                <div className="flex gap-2">
-                                                                                    <Button size="sm" variant="secondary" onClick={() => onSelectLecture(l)}>Play</Button>
-                                                                                    <Button size="sm" variant="danger" onClick={() => onDeleteLecture(course.id, module.id, l.id)}><DeleteIcon className="w-3 h-3" /></Button>
-                                                                                </div>
+                                                            <div className="space-y-4">
+                                                                {(module.topics || []).map((topic, tidx) => (
+                                                                    <div key={tidx} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+                                                                        <h5 className="font-bold text-black text-lg mb-3">{topic}</h5>
+                                                                        {module.topicOutlines?.[topic] && (
+                                                                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                                                                                {module.topicOutlines[topic]}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                                
+                                                                {(materialsByModule[module.id] && materialsByModule[module.id].length > 0) && (
+                                                                    <div className="space-y-2 mt-4">
+                                                                        {materialsByModule[module.id].map(m => (
+                                                                            <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                                                                <a href={`/api/materials/${m.id}/download`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2">
+                                                                                    <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                                    {m.title}
+                                                                                </a>
+                                                                                <span className="text-xs text-black font-bold uppercase tracking-widest bg-white px-3 py-1 rounded shadow-sm border border-black/10">PDF</span>
                                                                             </div>
                                                                         ))}
                                                                     </div>
-                                                                ) : <p className="text-sm italic text-muted-foreground">No videos yet.</p>}
-                                                            </div>
-
-                                                            <div>
-                                                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">Study Materials</label>
-                                                                <div className="flex gap-2 mb-2">
-                                                                    <Button size="sm" variant="outline" onClick={async () => {
-                                                                        const topics = module.topics || [];
-                                                                        if (!topics.length) return alert('Please add at least one lecture topic first.');
-
-                                                                        const confirmMsg = topics.length > 1
-                                                                            ? `Generate AI Textbook (PDFs) for ${topics.length} lectures based on their outlines?`
-                                                                            : `Generate AI Textbook for "${topics[0]}"?`;
-
-                                                                        if (!confirm(confirmMsg)) return;
-
-                                                                        try {
-                                                                            setUploading(prev => ({ ...prev, [module.id]: true }));
-                                                                            let successCount = 0;
-
-                                                                            for (const topic of topics) {
-                                                                                const outline = module.topicOutlines?.[topic] || "";
-                                                                                const res = await fetch(`/api/courses/${course.id}/modules/${module.id}/generate-notes`, {
-                                                                                    method: 'POST',
-                                                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
-                                                                                    body: JSON.stringify({ topic, outline })
-                                                                                });
-                                                                                if (res.ok) successCount++;
-                                                                            }
-
-                                                                            if (successCount > 0) {
-                                                                                alert(`Successfully generated textbooks for ${successCount} lectures!`);
-                                                                                loadMaterials(course.id, module.id);
-                                                                                onRefreshCourses?.();
-                                                                            } else {
-                                                                                alert('Failed to generate textbooks. Please check server logs.');
-                                                                            }
-                                                                        } catch (e) {
-                                                                            console.error(e);
-                                                                            alert('Error generating textbooks');
-                                                                        } finally {
-                                                                            setUploading(prev => ({ ...prev, [module.id]: false }));
-                                                                        }
-                                                                    }} disabled={uploading[module.id]}>
-                                                                        {uploading[module.id] ? 'Generating PDFs...' : '✨ Create AI Textbook'}
-                                                                    </Button>
-                                                                    <Button size="sm" variant="secondary" onClick={() => loadMaterials(course.id, module.id)}>Refresh</Button>
-                                                                </div>
-                                                                <div className="space-y-1">
-                                                                    {(materialsByModule[module.id] || []).map(m => (
-                                                                        <div key={m.id} className="flex justify-between text-sm text-muted-foreground">
-                                                                            <span>{m.title}</span>
-                                                                            <span className={m.indexed ? "text-black font-bold" : "text-gray-500"}>{m.indexed ? 'Ready' : 'Processing'}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )}
@@ -692,7 +581,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                         <h3 className="text-3xl font-bold text-black">{course.title}</h3>
                                         <p className="text-gray-500 mt-2">{course.description}</p>
                                     </div>
-                                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-black/5 text-black border border-black/10 uppercase tracking-widest">Enrolled</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-black/5 text-black border border-black/10 uppercase tracking-widest">Enrolled</span>
+                                        {onWithdrawCourse && (
+                                            <button
+                                                className="text-xs font-bold px-3 py-1 rounded-full bg-red-50 text-red-600 border border-red-200 uppercase tracking-widest transition-colors hover:bg-red-100"
+                                                onClick={() => {
+                                                    if (window.confirm('Are you sure you want to unenroll from this subject?')) {
+                                                        onWithdrawCourse(course.id);
+                                                    }
+                                                }}
+                                            >
+                                                Unenroll
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="space-y-6">

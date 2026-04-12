@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { CourseModule } from '../../types';
+import { Course, CourseModule } from '../../types';
 import Button from '../common/Button';
 import { PlusIcon, DeleteIcon, SparklesIcon, CheckIcon, UploadIcon } from '../Icons';
 import { getToken } from '../../services/authService';
 
 interface CoursePortalCreatorProps {
-    onCreateCourse: (subject: string, modules: CourseModule[]) => Promise<any>;
+    onCreateCourse?: (subject: string, modules: CourseModule[]) => Promise<any>;
+    onUpdateCourse?: (courseId: string, title?: string, description?: string) => Promise<any>;
+    onUpdateModuleTopics?: (courseId: string, moduleId: string, topics: string[], topicOutlines: Record<string, string>) => Promise<any>;
+    initialCourse?: Course;
+    initialMaterials?: any[];
     onCancel: () => void;
     onRefreshCourses?: () => void;
 }
@@ -18,13 +22,31 @@ interface LectureDraft {
     file: File | null;
     isGenerating: boolean;
     isUploaded: boolean;
+    existingMaterialId?: string;
 }
 
-const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCourse, onCancel, onRefreshCourses }) => {
+const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCourse, onUpdateCourse, onUpdateModuleTopics, initialCourse, initialMaterials, onCancel, onRefreshCourses }) => {
 
-    const [subject, setSubject] = useState('');
-    const [numLectures, setNumLectures] = useState(5);
-    const [lectures, setLectures] = useState<LectureDraft[]>([]);
+    const [subject, setSubject] = useState(initialCourse?.title || '');
+    const [numLectures, setNumLectures] = useState(initialCourse ? (initialCourse.modules[0]?.topics?.length || 5) : 5);
+    const [lectures, setLectures] = useState<LectureDraft[]>(() => {
+        if (initialCourse && initialCourse.modules[0]) {
+            const mod = initialCourse.modules[0];
+            return (mod.topics || []).map((t, i) => {
+                const mat = (initialMaterials || []).find((m: any) => m.title === t);
+                return {
+                    id: `lec-init-${i}-${Date.now()}`,
+                    title: t,
+                    outline: mod.topicOutlines?.[t] || '',
+                    file: null,
+                    isGenerating: false,
+                    isUploaded: !!mat,
+                    existingMaterialId: mat?.id
+                };
+            });
+        }
+        return [];
+    });
     const [isSaving, setIsSaving] = useState(false);
     const [status, setStatus] = useState('');
 
@@ -87,39 +109,56 @@ const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCours
         }
     };
 
-    const handleCreatePortal = async () => {
+    const handleSavePortal = async () => {
         if (!subject.trim()) return alert('Please enter a course subject.');
         if (lectures.some(l => !l.title.trim())) return alert('Please provide titles for all lectures.');
 
         setIsSaving(true);
-        setStatus('Creating course structure...');
+        setStatus(initialCourse ? 'Updating course structure...' : 'Creating course structure...');
         try {
             const token = getToken();
 
-            // 1. Create the course first with one main module
             const topics = lectures.map(l => l.title);
             const topicOutlines = lectures.reduce((acc, l) => ({ ...acc, [l.title]: l.outline }), {});
 
-            const mainModule: CourseModule = {
-                id: `mod-main-${Date.now()}`,
-                title: 'Course Content',
-                description: `Curriculum for ${subject}`,
-                topics: topics,
-                topicOutlines: topicOutlines,
-                lectures: [],
-                materialIds: {}
-            };
+            let courseId = '';
+            let moduleId = '';
 
-            const course = await onCreateCourse(subject, [mainModule]);
-            const courseId = course.id;
-            const moduleId = mainModule.id;
+            if (initialCourse) {
+                courseId = initialCourse.id;
+                moduleId = initialCourse.modules[0]?.id;
+                
+                if (onUpdateCourse && onUpdateModuleTopics) {
+                    await onUpdateCourse(courseId, subject);
+                    if (moduleId) {
+                        await onUpdateModuleTopics(courseId, moduleId, topics, topicOutlines);
+                    }
+                }
+            } else {
+                const mainModule: CourseModule = {
+                    id: `mod-main-${Date.now()}`,
+                    title: 'Course Content',
+                    description: `Curriculum for ${subject}`,
+                    topics: topics,
+                    topicOutlines: topicOutlines,
+                    lectures: [],
+                    materialIds: {}
+                };
 
-            // 2. Parallel Upload/Link PDFs
-            setStatus('Uploading all lecture materials in parallel...');
+                if (onCreateCourse) {
+                    const course = await onCreateCourse(subject, [mainModule]);
+                    courseId = course.id;
+                    moduleId = mainModule.id;
+                }
+            }
+
+            if (!courseId || !moduleId) throw new Error("Failed to get course or module ID");
+
+            setStatus('Uploading lecture materials in parallel...');
             console.log('[CoursePortal] Starting uploads - Course ID:', courseId, 'Module ID:', moduleId);
 
             const uploadPromises = lectures.map(async (lec) => {
-                if (lec.file) {
+                if (lec.file) { // Only upload if a new file was explicitly given
                     console.log('[CoursePortal] Uploading:', lec.title);
                     const formData = new FormData();
                     formData.append('file', lec.file);
@@ -251,11 +290,11 @@ const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCours
                                     {/* Right: File Upload */}
                                     <div className="lg:w-64 flex flex-col justify-center items-center gap-4 bg-gray-50 rounded-2xl p-6 border border-gray-100">
                                         <div className="text-center">
-                                            <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-2 ${lec.file ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-600'}`}>
-                                                {lec.file ? <CheckIcon className="w-6 h-6" /> : <UploadIcon className="w-6 h-6" />}
+                                            <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-2 ${(lec.file || lec.isUploaded) ? 'bg-black text-white shadow-sm' : 'bg-gray-100 text-gray-600'}`}>
+                                                {(lec.file || lec.isUploaded) ? <CheckIcon className="w-6 h-6" /> : <UploadIcon className="w-6 h-6" />}
                                             </div>
                                             <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                                                {lec.file ? 'PDF Ready' : 'Upload PDF'}
+                                                {lec.file ? 'Awaiting Upload' : (lec.isUploaded ? 'PDF Ready' : 'Upload PDF')}
                                             </p>
                                         </div>
 
@@ -271,7 +310,7 @@ const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCours
                                             htmlFor={`file-${lec.id}`}
                                             className="w-full py-2 bg-white border border-gray-200 rounded-xl text-xs font-black text-center cursor-pointer hover:bg-gray-50 hover:border-black transition-all shadow-sm"
                                         >
-                                            {lec.file ? 'Change File' : 'Browse Files'}
+                                            {(lec.file || lec.isUploaded) ? 'Replace File' : 'Browse Files'}
                                         </label>
 
                                         {lec.file && (
@@ -290,7 +329,7 @@ const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCours
                 <div className="flex flex-col md:flex-row gap-4 pt-10 border-t border-gray-200">
                     <Button
                         className="flex-1 py-5 rounded-2xl text-lg font-black shadow-xl shadow-black/20"
-                        onClick={handleCreatePortal}
+                        onClick={handleSavePortal}
                         disabled={isSaving || !subject}
                     >
                         {isSaving ? (
@@ -298,7 +337,7 @@ const CoursePortalCreator: React.FC<CoursePortalCreatorProps> = ({ onCreateCours
                                 <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
                                 {status}
                             </div>
-                        ) : 'Create Course Portal'}
+                        ) : (initialCourse ? 'Save Course Updates' : 'Create Course Portal')}
                     </Button>
                     <Button
                         variant="secondary"
