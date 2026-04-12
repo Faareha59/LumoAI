@@ -30,7 +30,6 @@ const Sidebar: React.FC<SidebarProps> = ({ user, currentView, setView, onLogout 
     { view: 'student_dashboard' as AppView, label: 'Dashboard', icon: <DashboardIcon className="w-5 h-5" /> },
     { view: 'chatbot' as AppView, label: 'Live Q&A Chatbot', icon: <ChatIcon className="w-5 h-5" /> },
     { view: 'study_tools' as AppView, label: 'Study Tools', icon: <TimerIcon className="w-5 h-5" /> },
-    { view: 'coding_game' as AppView, label: 'Game Arena', icon: <GameIcon className="w-5 h-5" />, comingSoon: true },
     { view: 'lumo_meeting' as AppView, label: 'Lumo Meeting', icon: <VideoIcon className="w-5 h-5" /> },
     { view: 'marketplace' as AppView, label: 'Marketplace', icon: <SparklesIcon className="w-5 h-5" /> },
     { view: 'my_exercises' as AppView, label: 'My Exercises', icon: <SparklesIcon className="w-5 h-5" /> },

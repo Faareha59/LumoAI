@@ -519,7 +519,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                     {expandedModules[module.id] && (
                                                         <div className="mt-4 pt-4 border-t border-border space-y-4">
                                                             <div className="space-y-4">
-                                                                {(module.topics || []).map((topic, tidx) => (
+                                                                {(module.topics || []).map((topic, tidx) => {
+                                                                    let matchedMaterial = null;
+                                                                    if (materialsByModule[module.id]) {
+                                                                        const materials = materialsByModule[module.id];
+                                                                        matchedMaterial = materials.find(m => m.title === topic) || materials.find(m => m.title.toLowerCase() === topic.toLowerCase()) || materials.find(m => m.title.toLowerCase().includes(topic.toLowerCase()) || topic.toLowerCase().includes(m.title.toLowerCase()));
+                                                                    }
+                                                                    return (
                                                                     <div key={tidx} className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
                                                                         <h5 className="font-bold text-black text-lg mb-3">{topic}</h5>
                                                                         {module.topicOutlines?.[topic] && (
@@ -527,22 +533,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                                                 {module.topicOutlines[topic]}
                                                                             </p>
                                                                         )}
-                                                                    </div>
-                                                                ))}
-                                                                
-                                                                {(materialsByModule[module.id] && materialsByModule[module.id].length > 0) && (
-                                                                    <div className="space-y-2 mt-4">
-                                                                        {materialsByModule[module.id].map(m => (
-                                                                            <div key={m.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                                                                <a href={`/api/materials/${m.id}/download`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2">
-                                                                                    <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                                                    {m.title}
+                                                                        {matchedMaterial && (
+                                                                            <div className="mt-4 flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                                                                <a href={`/api/materials/${matchedMaterial.id}/download`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-2">
+                                                                                    <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                                                    {matchedMaterial.title}
                                                                                 </a>
-                                                                                <span className="text-xs text-black font-bold uppercase tracking-widest bg-white px-3 py-1 rounded shadow-sm border border-black/10">PDF</span>
+                                                                                <span className="text-[10px] text-black font-bold uppercase tracking-widest bg-white px-2 py-0.5 rounded shadow-sm border border-black/10">PDF</span>
                                                                             </div>
-                                                                        ))}
+                                                                        )}
                                                                     </div>
-                                                                )}
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}

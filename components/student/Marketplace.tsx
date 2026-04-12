@@ -6,36 +6,26 @@ import { getToken } from '../../services/authService';
 const Marketplace: React.FC<{ user: any }> = ({ user }) => {
     const [view, setView] = useState<'browse' | 'posted' | 'working'>('browse');
     const [jobs, setJobs] = useState<MarketplaceJob[]>([]);
-    const [balance, setBalance] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeCategory, setActiveCategory] = useState('All');
 
     // Form state
     const [newTitle, setNewTitle] = useState('');
     const [newDesc, setNewDesc] = useState('');
-    const [newBudget, setNewBudget] = useState(500);
 
     const [submissionText, setSubmissionText] = useState('');
     const [selectedJob, setSelectedJob] = useState<MarketplaceJob | null>(null);
-
-    const categories = ['All', 'Machine Learning', 'Web Development', 'Data Science', 'Content Writing', 'UI/UX Design'];
+    
+    // Edit state
+    const [editingJobId, setEditingJobId] = useState<string | null>(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editDesc, setEditDesc] = useState('');
 
     useEffect(() => {
-        fetchBalance();
         if (view === 'browse') fetchJobs();
         if (view === 'posted' || view === 'working') fetchMyJobs();
     }, [view]);
 
-    const fetchBalance = async () => {
-        try {
-            const token = getToken();
-            const res = await fetch('/api/marketplace/wallet', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const data = await res.json();
-            setBalance(data.balance || 0);
-        } catch (e) { console.error(e); }
-    };
+
 
     const fetchJobs = async () => {
         try {
@@ -66,7 +56,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${token}`
                 },
-                body: JSON.stringify({ title: newTitle, description: newDesc, budget: newBudget })
+                body: JSON.stringify({ title: newTitle, description: newDesc })
             });
             if (res.ok) {
                 alert('Job posted successfully!');
@@ -117,16 +107,68 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                 setSubmissionText('');
                 setSelectedJob(null);
                 fetchMyJobs();
-                fetchBalance();
             } else {
                 alert('Submission failed');
             }
         } catch (e) { console.error(e); }
     };
 
+    const handleUncollaborate = async (id: string) => {
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}/uncollaborate`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                alert('Collaboration cancelled successfully!');
+                fetchMyJobs();
+            } else {
+                alert('Failed to cancel collaboration');
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this listing?')) return;
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                fetchMyJobs();
+            }
+        } catch (e) { console.error(e); }
+    };
+
+    const startEditing = (job: MarketplaceJob) => {
+        setEditingJobId(job._id);
+        setEditTitle(job.title);
+        setEditDesc(job.description);
+    };
+
+    const handleUpdate = async (id: string) => {
+        try {
+            const token = getToken();
+            const res = await fetch(`/api/marketplace/jobs/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ title: editTitle, description: editDesc })
+            });
+            if (res.ok) {
+                setEditingJobId(null);
+                fetchMyJobs();
+            }
+        } catch (e) { console.error(e); }
+    };
+
     const filteredJobs = jobs.filter(j =>
-        (j.title.toLowerCase().includes(searchQuery.toLowerCase()) || j.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        (activeCategory === 'All' || j.title.toLowerCase().includes(activeCategory.toLowerCase()) || j.description.toLowerCase().includes(activeCategory.toLowerCase()))
+        j.title.toLowerCase().includes(searchQuery.toLowerCase()) || j.description.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -148,34 +190,13 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                     </div>
 
                     <div className="flex items-center gap-8">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] leading-none mb-1.5">Investment Balance</span>
-                            <div className="flex items-center gap-2">
-                                <span className="text-2xl font-black text-black italic tracking-tighter">PKR {balance.toLocaleString()}</span>
-                                <div className="p-1 px-2 bg-black text-white rounded-lg text-[8px] font-black uppercase tracking-widest">+2.4%</div>
-                            </div>
-                        </div>
                         <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center text-white shadow-xl shadow-black/10 hover:rotate-6 transition-transform cursor-pointer">
                             <UserIcon className="w-6 h-6" />
                         </div>
                     </div>
                 </div>
 
-                {/* Categories Tab Bar - Premium Interactive Pill Design */}
-                <div className="max-w-7xl mx-auto mt-6 flex items-center gap-3 overflow-x-auto no-scrollbar pb-1">
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => setActiveCategory(cat)}
-                            className={`px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 transform active:scale-95
-                                ${activeCategory === cat
-                                    ? 'bg-black text-white shadow-lg shadow-black/10'
-                                    : 'bg-white text-gray-500 border border-gray-200 hover:border-black hover:text-black hover:bg-gray-50/50'}`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
-                </div>
+
             </header>
 
             {/* Glassmorphism View Switcher */}
@@ -229,24 +250,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                                 {filteredJobs.map(job => (
                                     <div key={job._id} className="group bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_25px_60px_-20px_rgba(0,0,0,0.1)] transition-all duration-500 hover:-translate-y-2 flex flex-col">
-                                        {/* Premium Thumbnail Section */}
-                                        <div className="aspect-[1.5/1] relative overflow-hidden">
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10" />
-                                            <img
-                                                src={`https://images.unsplash.com/photo-${job.title.toLowerCase().includes('ml') || job.title.toLowerCase().includes('learning') ? '1555255707-c0796c88b1ee' : '1587620962725-abab7fe55159'}?auto=format&fit=crop&q=80&w=800`}
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-                                                alt="Gig Thumbnail"
-                                            />
-                                            <div className="absolute top-5 left-5 z-20 px-4 py-1.5 bg-black/80 backdrop-blur-md rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] text-white border border-white/20 shadow-xl">
-                                                Verified Pro
-                                            </div>
-                                            <div className="absolute bottom-5 left-5 z-20 flex items-center gap-2">
-                                                <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xl border border-white/30 flex items-center justify-center text-white">
-                                                    <StarIcon className="w-4 h-4 text-white fill-white" />
-                                                </div>
-                                                <span className="text-white font-black text-sm tracking-tighter">4.9 <span className="text-white/60 font-medium text-[10px] uppercase">(12)</span></span>
-                                            </div>
-                                        </div>
+
 
                                         <div className="p-7 flex flex-col flex-1">
                                             <div className="flex items-center gap-3 mb-5">
@@ -266,18 +270,13 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                                                 {job.title}
                                             </h3>
 
-                                            <div className="mt-auto pt-6 border-t border-gray-50 flex justify-between items-center">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-[0.1em] mb-1">Commission Price</span>
-                                                    <span className="text-xl font-black text-black italic tracking-tighter uppercase leading-none">PKR {job.budget}</span>
-                                                </div>
-
+                                            <div className="mt-auto pt-6 border-t border-gray-50 flex justify-end items-center">
                                                 {job.creatorId !== user.id ? (
                                                     <button
                                                         onClick={() => handleAccept(job._id)}
                                                         className="px-6 py-3 bg-black hover:bg-gray-800 text-white rounded-2xl transition-all duration-300 font-black uppercase tracking-widest text-[10px] shadow-lg hover:shadow-black/10 active:scale-95 flex items-center gap-2"
                                                     >
-                                                        Hire <BoltIcon className="w-3 h-3 text-white" />
+                                                        Collaborate <BoltIcon className="w-3 h-3 text-white" />
                                                     </button>
                                                 ) : (
                                                     <div className="px-5 py-2 bg-black text-white rounded-xl text-[9px] font-black uppercase tracking-widest border border-black/10">
@@ -315,10 +314,14 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                                                 </div>
                                                 <h3 className="text-3xl font-black text-black uppercase italic tracking-tighter leading-none">{job.title}</h3>
                                             </div>
-                                            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 min-w-[200px] text-center">
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Escrow Protected Funds</p>
-                                                <p className="text-3xl font-black text-black tracking-tighter uppercase italic leading-none">PKR {job.budget}</p>
-                                            </div>
+                                            {job.status === 'IN_PROGRESS' && (
+                                                <button
+                                                    onClick={() => handleUncollaborate(job._id)}
+                                                    className="px-5 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all"
+                                                >
+                                                    Uncollaborate
+                                                </button>
+                                            )}
                                         </div>
 
                                         <p className="text-slate-500 text-base leading-relaxed mb-12 pb-12 border-b-2 border-dashed border-slate-100 font-medium">
@@ -431,18 +434,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                                                 onChange={e => setNewDesc(e.target.value)}
                                             />
                                         </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[10px] font-black text-black uppercase tracking-widest ml-2">Contract Value (PKR)</label>
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    className="w-full pl-20 pr-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-black font-black focus:bg-white focus:border-black/30 transition-all text-xl"
-                                                    value={newBudget}
-                                                    onChange={e => setNewBudget(Number(e.target.value))}
-                                                />
-                                                <div className="absolute left-6 top-1/2 -translate-y-1/2 px-2 py-1 bg-black text-white rounded-lg font-black text-[9px] uppercase italic">PKR</div>
-                                            </div>
-                                        </div>
+
                                         <button
                                             onClick={handlePostJob}
                                             className="w-full py-6 bg-black hover:bg-gray-900 text-white font-black uppercase italic tracking-[0.25em] text-[11px] rounded-[2rem] transition-all shadow-2xl shadow-black/10 active:scale-[0.98]"
@@ -461,14 +453,7 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
 
                                 {jobs.map(job => (
                                     <div key={job._id} className="bg-white border-2 border-gray-100 p-10 rounded-[3.5rem] flex flex-col md:flex-row items-center gap-10 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.02)] group hover:border-black/30 hover:shadow-xl hover:shadow-black/5 transition-all duration-500">
-                                        <div className="w-24 h-24 bg-gray-50 rounded-[2rem] overflow-hidden flex-shrink-0 relative shadow-lg group-hover:rotate-3 transition-transform">
-                                            <img
-                                                src={`https://images.unsplash.com/photo-${job.title.toLowerCase().includes('ml') || job.title.toLowerCase().includes('learning') ? '1555255707-c0796c88b1ee' : '1587620962725-abab7fe55159'}?auto=format&fit=crop&q=80&w=200`}
-                                                className="w-full h-full object-cover"
-                                                alt="Gig Icon"
-                                            />
-                                            <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors" />
-                                        </div>
+
                                         <div className="flex-1 text-center md:text-left space-y-3">
                                             <div className="flex flex-wrap justify-center md:justify-start gap-4 mb-2">
                                                 <div className="flex items-center gap-2">
@@ -479,12 +464,29 @@ const Marketplace: React.FC<{ user: any }> = ({ user }) => {
                                                     Freelancer: <span className="text-black italic">{job.freelancerName || 'N/A'}</span>
                                                 </div>
                                             </div>
-                                            <h4 className="text-2xl font-black text-black uppercase italic tracking-tight group-hover:text-black transition-colors leading-none">{job.title}</h4>
-                                            <p className="text-gray-400 text-sm font-semibold italic line-clamp-1 max-w-md">{job.description}</p>
+                                            {editingJobId === job._id ? (
+                                                <div className="space-y-2">
+                                                    <input className="w-full px-4 py-2 border rounded" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                                                    <textarea className="w-full px-4 py-2 border rounded" value={editDesc} onChange={e => setEditDesc(e.target.value)} />
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => handleUpdate(job._id)} className="px-4 py-2 bg-black text-white text-[10px] uppercase font-black tracking-widest rounded-xl">Save</button>
+                                                        <button onClick={() => setEditingJobId(null)} className="px-4 py-2 bg-gray-200 text-black text-[10px] uppercase font-black tracking-widest rounded-xl">Cancel</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <h4 className="text-2xl font-black text-black uppercase italic tracking-tight group-hover:text-black transition-colors leading-none">{job.title}</h4>
+                                                    <p className="text-gray-400 text-sm font-semibold italic line-clamp-1 max-w-md">{job.description}</p>
+                                                </>
+                                            )}
                                         </div>
-                                        <div className="text-center md:text-right min-w-[120px]">
-                                            <p className="text-2xl font-black text-black tracking-tighter uppercase italic leading-none mb-1">PKR {job.budget}</p>
-                                            <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest leading-none">Flat Rate</span>
+                                        <div className="text-center md:text-right min-w-[120px] flex flex-col gap-2">
+                                            {editingJobId !== job._id && (
+                                                <>
+                                                    <button onClick={() => startEditing(job)} className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all border border-slate-200">Edit</button>
+                                                    <button onClick={() => handleDelete(job._id)} className="px-5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-sm transition-all border border-red-100">Delete</button>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

@@ -1468,27 +1468,15 @@ app.post('/api/marketplace/jobs', async (req, res) => {
   try {
     const user = await getUserFromAuth(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const { title, description, budget } = req.body || {};
-    if (!title || !description || !budget) return res.status(400).json({ error: 'Missing fields' });
-
-    // Simple logic: Deduct from creator immediately? Or hold in escrow?
-    // For simplicity: We verify they have funds (mock) or just allow negative for prototype?
-    // Let's give every new user 5000 PKR to start with in a migration or just assume infinite for now/default 0.
-    // Let's implement a "faucet" if balance is 0.
-
-    if ((user.balance || 0) < budget) {
-      // Auto-faucet for demo purposes if low balance
-      await db.collection('users').updateOne({ _id: user._id }, { $set: { balance: 10000 } });
-    }
+    const { title, description } = req.body || {};
+    if (!title || !description) return res.status(400).json({ error: 'Missing fields' });
 
     const job = {
       title,
       description,
-      budget: Number(budget),
-      currency: 'PKR',
       creatorId: user._id,
       creatorName: user.name,
-      status: 'OPEN', // OPEN, IN_PROGRESS, REVIEW, COMPLETED
+      status: 'OPEN',
       createdAt: new Date()
     };
     const r = await db.collection('marketplace_jobs').insertOne(job);
@@ -1540,6 +1528,69 @@ app.post('/api/marketplace/jobs/:id/accept', async (req, res) => {
     return res.json({ success: true });
   } catch (e) {
     return res.status(500).json({ error: 'Failed to accept job' });
+  }
+});
+
+// DELETE a job
+app.delete('/api/marketplace/jobs/:id', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (job.creatorId.toString() !== user._id.toString()) return res.status(403).json({ error: 'Not your job' });
+
+    await db.collection('marketplace_jobs').deleteOne({ _id: new ObjectId(id) });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to delete job' });
+  }
+});
+
+// UPDATE a job
+app.put('/api/marketplace/jobs/:id', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const { title, description } = req.body;
+
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (job.creatorId.toString() !== user._id.toString()) return res.status(403).json({ error: 'Not your job' });
+
+    await db.collection('marketplace_jobs').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { title, description, updatedAt: new Date() } }
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to update job' });
+  }
+});
+
+// UNCOLLABORATE
+app.post('/api/marketplace/jobs/:id/uncollaborate', async (req, res) => {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const job = await db.collection('marketplace_jobs').findOne({ _id: new ObjectId(id) });
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (job.freelancerId && job.freelancerId.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'Not assigned to you' });
+    }
+
+    await db.collection('marketplace_jobs').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'OPEN' }, $unset: { freelancerId: "", freelancerName: "", acceptedAt: "" } }
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to uncollaborate' });
   }
 });
 
@@ -1596,13 +1647,6 @@ app.post('/api/marketplace/jobs/:id/submit', async (req, res) => {
     }
 
     if (verdict.approved) {
-      // Transfer Funds
-      // 1. Deduct from Creator (assuming we did escrow or deduct now) - let's deduct/move now.
-      // Creator balance check? We gave them faucet earlier.
-      // 2. Add to Freelancer
-      await db.collection('users').updateOne({ _id: job.creatorId }, { $inc: { balance: -job.budget } });
-      await db.collection('users').updateOne({ _id: job.freelancerId }, { $inc: { balance: job.budget } });
-
       await db.collection('marketplace_jobs').updateOne(
         { _id: new ObjectId(id) },
         { $set: { status: 'COMPLETED', submissionText, aiVerdict: verdict, completedAt: new Date() } }

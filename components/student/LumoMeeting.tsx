@@ -89,7 +89,7 @@ const LumoMeeting: React.FC = () => {
                         </button>
                     </div>
                     <iframe
-                        src={`${generatedLink}#config.prejoinPageEnabled=false`}
+                        src={`${generatedLink}#config.prejoinPageEnabled=false&config.disableInviteFunctions=true`}
                         allow="camera; microphone; display-capture; autoplay; clipboard-write"
                         className="w-full h-full border-0"
                         title="Jitsi Meeting"
