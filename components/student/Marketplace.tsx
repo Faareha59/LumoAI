@@ -282,11 +282,6 @@ const Marketplace: React.FC<{
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-8">
-                        <div className="w-12 h-12 rounded-2xl bg-black flex items-center justify-center text-white shadow-xl shadow-black/10 hover:rotate-6 transition-transform cursor-pointer">
-                            <UserIcon className="w-6 h-6" />
-                        </div>
-                    </div>
                 </div>
             </header>
 
