@@ -6,6 +6,7 @@ const LumoMeeting: React.FC<{ initialRoomId?: string }> = ({ initialRoomId }) =>
     const [meetingId, setMeetingId] = useState(initialRoomId || '');
     const [inMeeting, setInMeeting] = useState(false);
     const [generatedLink, setGeneratedLink] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         if (initialRoomId) {
@@ -14,15 +15,20 @@ const LumoMeeting: React.FC<{ initialRoomId?: string }> = ({ initialRoomId }) =>
     }, [initialRoomId]);
 
     const generateMeetingId = () => {
-        const randomId = `LumoAI-${Math.random().toString(36).substring(7)}`;
+        const randomId = `LumoAI-${Math.random().toString(36).substring(2, 8)}`;
         setMeetingId(randomId);
+        // Auto-join after a short delay to ensure state is set
+        setTimeout(() => handleJoin(randomId), 100);
     };
 
     const handleJoin = (id?: string) => {
         const finalId = id || meetingId;
         if (!finalId.trim()) return;
+        setIsLoading(true);
         setGeneratedLink(`https://meet.jit.si/${finalId}`);
         setInMeeting(true);
+        // Hide loading after iframe likely loaded
+        setTimeout(() => setIsLoading(false), 3000);
     };
 
     const handleCopyLink = () => {
@@ -80,8 +86,25 @@ const LumoMeeting: React.FC<{ initialRoomId?: string }> = ({ initialRoomId }) =>
                     </div>
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col min-h-0 bg-black rounded-lg overflow-hidden border border-border relative">
+                <div className="flex-1 flex flex-col min-h-[500px] bg-black rounded-lg overflow-hidden border border-border relative">
+                    {isLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
+                            <div className="text-white text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                                <p className="text-lg font-semibold">Loading meeting...</p>
+                                <p className="text-sm text-gray-400 mt-2">Please allow camera/mic permissions when prompted</p>
+                            </div>
+                        </div>
+                    )}
                     <div className="absolute top-4 right-4 z-10 flex gap-2">
+                        <a
+                            href={generatedLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-blue-600/90 backdrop-blur text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-600 shadow-sm"
+                        >
+                            Open in New Tab
+                        </a>
                         <button
                             onClick={handleCopyLink}
                             className="bg-background/80 backdrop-blur text-foreground px-3 py-1.5 rounded-md text-sm font-medium hover:bg-background border border-border shadow-sm"
@@ -90,14 +113,15 @@ const LumoMeeting: React.FC<{ initialRoomId?: string }> = ({ initialRoomId }) =>
                         </button>
                         <button
                             onClick={() => setInMeeting(false)}
-                            className="bg-black/80 backdrop-blur text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-black shadow-sm"
+                            className="bg-red-600/90 backdrop-blur text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-red-600 shadow-sm"
                         >
                             Leave Meeting
                         </button>
                     </div>
                     <iframe
-                        src={`${generatedLink}#config.prejoinPageEnabled=false&config.disableInviteFunctions=true`}
-                        allow="camera; microphone; display-capture; autoplay; clipboard-write"
+                        src={`${generatedLink}#config.prejoinPageEnabled=false&config.disableInviteFunctions=true&config.startWithAudioMuted=false&config.startWithVideoMuted=false`}
+                        allow="camera; microphone; display-capture; autoplay; clipboard-write; fullscreen"
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation-by-user-activation"
                         className="w-full h-full border-0"
                         title="Jitsi Meeting"
                     />
