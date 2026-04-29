@@ -155,7 +155,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
     const startQuiz = async (courseId: string, moduleId: string) => {
         try {
             const q = await generateQuiz(courseId, moduleId);
-            const endAt = Date.now() + 5 * 60 * 1000;
+            const endAt = Date.now() + 5 * 60 * 1000; // 5 minutes for short quiz
             setActiveQuiz({ courseId, moduleId, quizId: q.id, questions: q.questions, answers: new Array(q.questions.length).fill(null), submitting: false, endAt, left: 5 * 60 });
         } catch (e: any) {
             setActiveQuiz({ courseId, moduleId, quizId: '', questions: [], answers: [], submitting: false, endAt: 0, left: 0, error: String(e?.message || 'Failed to generate quiz') });
@@ -261,7 +261,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                 answers: a.answers
             });
 
-            // Store result instead of just alerting
+            // Storing results instead of just alerting
             setActiveQuiz({ ...a, result, submitting: false });
 
             try { setAttemptsByCourse(await getAttemptsSummary()); } catch { }
@@ -293,7 +293,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
         }
     }, [activeQuiz?.left]);
 
-    // Load materials for all modules in enrolled courses (student view)
+    // Loading materials for all modules in enrolled courses (student view)
     useEffect(() => {
         if (user.role !== Role.Student) return;
         const loadAllMaterials = async () => {
@@ -1043,7 +1043,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
 
                                                     <div className="space-y-3">
                                                         {q.type === 'mcq' || !q.type ? (
-                                                            // Multiple Choice
+                                                          
+                                                    // Multiple Choice
                                                             q.options.map((opt, oi) => (
                                                                 <label key={oi} className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${activeQuiz.answers[i] === oi
                                                                     ? 'border-black bg-black text-white shadow-md'
@@ -1062,7 +1063,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                                 </label>
                                                             ))
                                                         ) : q.type === 'short' ? (
-                                                            // Short Answer
+                                                           
+                                                    // Short Answer
                                                             <input
                                                                 type="text"
                                                                 value={typeof activeQuiz.answers[i] === 'string' ? activeQuiz.answers[i] : ''}
@@ -1071,7 +1073,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                                                 className="w-full p-4 border-2 border-gray-300 rounded-xl focus:border-black focus:outline-none text-base text-black"
                                                             />
                                                         ) : q.type === 'programming' ? (
-                                                            // Programming Question
+                                                            
+                                                    // Programming Question
                                                             <textarea
                                                                 value={typeof activeQuiz.answers[i] === 'string' ? activeQuiz.answers[i] : ''}
                                                                 onChange={(e) => setAnswer(i, e.target.value)}
@@ -1131,6 +1134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                     </div>
                 </div>
             )}
+            
             {/* Fullscreen Exercise Overlay */}
             {activeExercise && (
                 <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto">
@@ -1153,6 +1157,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, courses, currentView, onSel
                                 </div>
                             ) : (
                                 <div className="flex flex-col md:flex-row h-full">
+                                    
                                     {/* Left Section: Exercise Info */}
                                     <div className="flex-1 p-10 md:p-12 space-y-8 bg-white overflow-y-auto custom-scrollbar">
                                         <div className="flex justify-between items-start">
