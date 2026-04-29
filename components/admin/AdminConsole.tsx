@@ -80,6 +80,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             <h2 className="text-lg font-semibold">Create Teacher</h2>
                             <p className="text-xs text-muted-foreground">Add a teacher account with a temp password to share.</p>
                         </div>
+                        
                         <input
                             type="text"
                             placeholder="Teacher name"
@@ -87,6 +88,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             onChange={(e) => setTeacherName(e.target.value)}
                             className="w-full px-3 py-2 border border-border rounded bg-background"
                         />
+                        
                         <input
                             type="email"
                             placeholder="Teacher email"
@@ -94,6 +96,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             onChange={(e) => setTeacherEmail(e.target.value)}
                             className="w-full px-3 py-2 border border-border rounded bg-background"
                         />
+                        
                         <input
                             type="text"
                             placeholder="Temporary password"
@@ -101,6 +104,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             onChange={(e) => setTeacherPassword(e.target.value)}
                             className="w-full px-3 py-2 border border-border rounded bg-background"
                         />
+                        
                         <Button onClick={handleCreateTeacher} disabled={disabledCreate || loading === 'create'}>
                             {loading === 'create' ? 'Creating…' : 'Create teacher'}
                         </Button>
@@ -121,6 +125,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             onChange={(e) => setResetEmail(e.target.value)}
                             className="w-full px-3 py-2 border border-border rounded bg-background"
                         />
+                        
                         <input
                             type="text"
                             placeholder="New temporary password"
@@ -128,6 +133,7 @@ const AdminConsole: React.FC<AdminConsoleProps> = ({ onClose }) => {
                             onChange={(e) => setResetPasswordValue(e.target.value)}
                             className="w-full px-3 py-2 border border-border rounded bg-background"
                         />
+                        
                         <Button variant="outline" onClick={handleResetPassword} disabled={disabledReset || loading === 'reset'}>
                             {loading === 'reset' ? 'Resetting…' : 'Reset password'}
                         </Button>
