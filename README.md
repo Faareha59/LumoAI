@@ -2,6 +2,9 @@
 
 Built this website to provide students and teachers with a simple, modern learning experience: AI chat, class collaboration, lecture tools, and a focus timer — all in one place.
 
+## System Architechture
+![LumoAI System Design](./LumoAI_SystemDesign.png)
+
 ## Features
 - Student Portal
   - Live AI Q&A Chat (voice input, formatted replies, export)
